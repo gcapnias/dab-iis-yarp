@@ -8,20 +8,20 @@
 
 ## 1. Target architecture
 
-```
+```text
           https://www.example.gr/data/...        https://www.example.gr/graphql
                           │                                   │
-                  ┌───────▼───────────────────────────────────▼──────┐
-                  │  Main app (IIS site "ExampleSite", ExamplePool)  │
-                  │  ASP.NET Core / Umbraco + YARP                   │
+                  ┌───────▼───────────────────────────────────▼───────┐
+                  │  Main app (IIS site "ExampleSite", ExamplePool)   │
+                  │  ASP.NET Core / Umbraco + YARP                    │
                   │   • authn / authz at the edge (optional)          │
                   │   • header sanitising                             │
                   │   • route allowlist, rate limiting                │
                   └───────────────────────┬───────────────────────────┘
                                           │ http://127.0.0.1:5080  (loopback only)
                   ┌───────────────────────▼───────────────────────────┐
-                  │  IIS site "dab-internal", DabPool (No Managed)   │
-                  │  ANCM in-process → Azure.DataApiBuilder.Service  │
+                  │  IIS site "dab-internal", DabPool (No Managed)    │
+                  │  ANCM in-process → Azure.DataApiBuilder.Service   │
                   └───────────────────────┬───────────────────────────┘
                                           │ SQL (Integrated Security)
                                     ┌─────▼─────┐
@@ -32,7 +32,7 @@
 Public endpoints:
 
 | Purpose | Public URL | Forwarded to DAB |
-|---|---|---|
+| --- | --- | --- |
 | REST | `https://www.example.gr/data/{entity}` | `http://127.0.0.1:5080/data/{entity}` |
 | GraphQL | `https://www.example.gr/graphql` | `http://127.0.0.1:5080/graphql` |
 | Health | *not public* | `http://127.0.0.1:5080/` |
@@ -108,7 +108,7 @@ Expand-Archive $zip -DestinationPath "D:\Sites\dab-internal"
 ```
 
 | Setting | Reason |
-|---|---|
+| --- | --- |
 | `rest.path: /data` | Keeps public and internal paths identical (section 2). |
 | `host.mode: production` | Disables Swagger UI and the Nitro IDE. |
 | `allow-introspection: false` | Hides the GraphQL schema from anonymous probing. |
@@ -168,7 +168,7 @@ Validate in your pipeline with the CLI from the same zip:
 Prefer Integrated Security with the app pool identity. This means no secret at all:
 
 | SQL location | Pool identity | SQL login |
-|---|---|---|
+| --- | --- | --- |
 | Same server | `ApplicationPoolIdentity` | `IIS AppPool\DabPool` |
 | Remote, domain-joined | `ApplicationPoolIdentity` | `DOMAIN\WEBSERVER$` |
 | Remote, per-app identity | gMSA / service account | that account |
@@ -260,7 +260,7 @@ dotnet add package Yarp.ReverseProxy
 What each transform does:
 
 | Transform | Why |
-|---|---|
+| --- | --- |
 | `RequestHeaderRemove: X-MS-CLIENT-PRINCIPAL` | **Critical.** With the `AppService`/`StaticWebApps` providers, DAB trusts this header as the user identity. Remove it from every client request. Pattern B re-adds a gateway-built value. |
 | `RequestHeaderRemove: Cookie` | Umbraco back-office and member cookies must never reach DAB or its logs. |
 | `X-Forwarded: Set` | Overwrites (not appends) `X-Forwarded-Proto/Host/For/Prefix`, so clients can't spoof them. DAB uses Proto + Host to build correct `nextLink`/`Location` URLs. |
@@ -328,7 +328,7 @@ Adapt this to your existing `Program.cs` (Delivery API, custom composers, and so
 ## 5. Trust model in one table
 
 | Header | Client → YARP | YARP → DAB |
-|---|---|---|
+| --- | --- | --- |
 | `Authorization` | forwarded | validated by DAB (pattern A) |
 | `X-MS-API-ROLE` | forwarded | validated by DAB against the principal's roles |
 | `X-MS-CLIENT-PRINCIPAL` | **always removed** | absent (A) or built by the gateway (B) |
@@ -536,7 +536,7 @@ curl.exe -s "http://127.0.0.1:5080/"
 ## 11. Troubleshooting
 
 | Symptom | Likely cause | Fix |
-|---|---|---|
+| --- | --- | --- |
 | 502 from YARP | DAB site stopped or startup failure | Check the `DabPool` state and the Event Log; enable stdout logging temporarily |
 | 504 / slow first call | Cold start or `ActivityTimeout` too low | Warm-up settings; raise the timeout |
 | 307 redirect loops or redirect to `https://127.0.0.1` | DAB HTTPS redirect active | Add `--no-https-redirect` to `arguments` |

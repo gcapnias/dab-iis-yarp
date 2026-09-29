@@ -6,7 +6,7 @@ This guide explains how to deploy Microsoft Data API Builder (DAB) as an IIS sub
 
 ## 1. Architecture Overview
 
-```
+```text
 [ Incoming Request: https://example.com/dab/rest/Book ]
                          │
                          ▼
@@ -34,10 +34,12 @@ This guide explains how to deploy Microsoft Data API Builder (DAB) as an IIS sub
 ## 2. Prerequisites & Parent `web.config` Setup
 
 ### A. Install IIS Prerequisites
+
 * **IIS 8.5+**
 * **ASP.NET Core Module v2 (ANCM)**: Included in the [.NET Core Hosting Bundle](https://dotnet.microsoft.com/download/dotnet).
 
 ### B. Prevent `web.config` Inheritance
+
 By default, IIS sub-applications inherit handlers and modules from the parent website. To prevent configuration conflicts (such as duplicate handler errors):
 
 Wrap the parent website's `<system.webServer>` configuration inside a `<location>` tag with `inheritInChildApplications="false"` in the parent website's `web.config`:
@@ -65,6 +67,7 @@ Wrap the parent website's `<system.webServer>` configuration inside a `<location
 ## 3. IIS Directory & App Pool Setup
 
 ### Step 1: Create a Dedicated Application Pool
+
 1. Open **IIS Manager**.
 2. Right-click **Application Pools** > **Add Application Pool...**
 3. Configure the pool:
@@ -74,11 +77,13 @@ Wrap the parent website's `<system.webServer>` configuration inside a `<location
 4. Click **OK**.
 
 ### Step 2: Create the Physical Folder & Deploy DAB
+
 1. Create a physical directory on disk, e.g., `C:\inetpub\wwwroot\my-main-site\dab`.
 2. Extract the published DAB binaries or installed `.NET tool` binaries into this directory.
 3. Ensure the directory contains your configuration file: `dab-config.json`.
 
 ### Step 3: Convert the Folder to an IIS Application
+
 1. In IIS Manager, expand your **Main Website**.
 2. Right-click the `dab` folder > **Convert to Application**.
 3. Click **Select...** and choose `DabAppPool`.
@@ -89,6 +94,7 @@ Wrap the parent website's `<system.webServer>` configuration inside a `<location
 ## 4. Sub-Application Configuration
 
 ### A. Sub-Application `web.config`
+
 Create a `web.config` file inside `C:\inetpub\wwwroot\my-main-site\dab\web.config`:
 
 ```xml
@@ -123,6 +129,7 @@ Create a `web.config` file inside `C:\inetpub\wwwroot\my-main-site\dab\web.confi
 ```
 
 ### B. Adjusting `dab-config.json` Base Paths
+
 When running under an IIS sub-application (`/dab`), requests reaching the application will retain the path prefix unless stripped. Ensure your DAB path configuration aligns with your URI schema:
 
 ```json
@@ -160,6 +167,7 @@ When running under an IIS sub-application (`/dab`), requests reaching the applic
 ```
 
 *Resulting Endpoints:*
+
 * REST: `https://example.com/dab/rest/Book`
 * GraphQL: `https://example.com/dab/graphql`
 
@@ -170,6 +178,7 @@ When running under an IIS sub-application (`/dab`), requests reaching the applic
 1. **Verify File Permissions**: Ensure the IIS AppPool Identity (`IIS AppPool\DabAppPool`) has **Read & Execute** permissions on `C:\inetpub\wwwroot\my-main-site\dab`.
 2. **Logs**: Check `C:\inetpub\wwwroot\my-main-site\dab\logs\stdout_*.log` for engine startup logs if an HTTP 500.19 or 502.5 error occurs.
 3. **Test Endpoint**:
+
    ```bash
    curl -i https://example.com/dab/rest/Book
    ```

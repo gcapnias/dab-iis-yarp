@@ -8,7 +8,7 @@
 
 ## 1. Target architecture
 
-```
+```text
                          https://www.example.gr
                                    │
                           ┌────────▼────────┐
@@ -17,7 +17,7 @@
                           └───┬─────────┬───┘
                     /  (root) │         │ /dab  (sub-application)
                               │         │
-                  ┌───────────▼──┐   ┌──▼─────────────────────┐
+                  ┌───────────▼──┐   ┌──▼──────────────────────┐
                   │ App pool:    │   │ App pool: DabPool       │
                   │ ExamplePool  │   │ No Managed Code         │
                   │ Umbraco      │   │ ANCM in-process         │
@@ -33,7 +33,7 @@
 Public endpoints:
 
 | Purpose | URL |
-|---|---|
+| --- | --- |
 | REST | `https://www.example.gr/dab/api/{entity}` |
 | GraphQL | `https://www.example.gr/dab/graphql` |
 | Basic health (liveness) | `https://www.example.gr/dab/` |
@@ -79,7 +79,7 @@ In Azure DevOps, store the zip as a pipeline artifact or in Azure Artifacts (uni
 
 The DAB folder must **not** sit inside the parent app's published output, or a parent deployment could wipe it. Use a sibling folder and point the sub-application at it.
 
-```
+```text
 D:\Sites\ExampleSite\
 ├── www\                     ← parent site physical path (Umbraco)
 └── dab\                     ← sub-application physical path
@@ -141,7 +141,7 @@ When `DAB_ENVIRONMENT` is set (for example `Production`), DAB merges `dab-config
 Why each production setting:
 
 | Setting | Reason |
-|---|---|
+| --- | --- |
 | `host.mode: production` | Disables Swagger UI and the Nitro GraphQL IDE. |
 | `graphql.allow-introspection: false` | Hides the schema from anonymous probing. Keep it on in non-production. |
 | `mcp.enabled: false` | DAB 2.x exposes an MCP endpoint at `/mcp` by default. Turn it off unless you use it. |
@@ -162,7 +162,7 @@ $env:DAB_SQL_CONN = "<connection string for the validation agent>"
 **Preferred: no secret at all.** Give the app pool a Windows identity and use Integrated Security:
 
 | SQL location | Pool identity | SQL login to create |
-|---|---|---|
+| --- | --- | --- |
 | Same server | `ApplicationPoolIdentity` | `IIS AppPool\DabPool` |
 | Remote, domain-joined | `ApplicationPoolIdentity` | `DOMAIN\WEBSERVER$` (machine account) |
 | Remote, want per-app identity | gMSA or domain service account | that account |
@@ -291,7 +291,7 @@ IIS child applications inherit the parent's `system.webServer` configuration unl
 Review what's inherited:
 
 | Parent section | Risk for `/dab` | Action |
-|---|---|---|
+| --- | --- | --- |
 | `handlers` → `aspNetCore` | 500.19 duplicate entry | Handled by `<remove name="aspNetCore" />` in the child |
 | `rewrite/rules` (lowercase, trailing slash, redirects) | Can alter REST paths, entity names and query strings | Add `<rules><clear /></rules>`, then re-add only what DAB needs (e.g. HTTPS) |
 | `httpProtocol/customHeaders` (CSP, X-Frame-Options) | Usually harmless for JSON | Keep |
@@ -361,7 +361,7 @@ curl.exe -s -i -H "Authorization: Bearer $token" -H "X-MS-API-ROLE: catalog.edit
 ## 16. Troubleshooting
 
 | Symptom | Likely cause | Fix |
-|---|---|---|
+| --- | --- | --- |
 | HTTP 500.19, duplicate `aspNetCore` | Parent handler inherited | `<remove name="aspNetCore" />` in the child `web.config` |
 | HTTP 500.35 | Two in-process apps share a pool | Separate `DabPool` |
 | HTTP 500.30 / 500.37 | DAB failed or timed out at startup | Enable stdout log. Usual causes: missing `DAB_SQL_CONN`, DB unreachable, invalid config |

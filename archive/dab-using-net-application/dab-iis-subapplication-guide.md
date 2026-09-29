@@ -524,7 +524,7 @@ With the following DAB configuration:
 the public URLs are:
 
 | Function | Public URL |
-|---|---|
+| --- | --- |
 | DAB root application | `/dab` |
 | REST entity | `/dab/api/Book` |
 | GraphQL | `/dab/graphql` |
@@ -807,30 +807,30 @@ This provides a conventional IIS operational model while keeping DAB isolated as
 
 ---
 
-# References
+## References
 
 Microsoft documentation:
 
 - Data API Builder — Deploy to Azure App Service  
-  https://learn.microsoft.com/en-us/azure/data-api-builder/deployment/azure-app-service
+  <https://learn.microsoft.com/en-us/azure/data-api-builder/deployment/azure-app-service>
 
 - Data API Builder — `dab start` command  
-  https://learn.microsoft.com/en-us/azure/data-api-builder/command-line/dab-start
+  <https://learn.microsoft.com/en-us/azure/data-api-builder/command-line/dab-start>
 
 - Data API Builder — Runtime configuration  
-  https://learn.microsoft.com/en-us/azure/data-api-builder/configuration/runtime
+  <https://learn.microsoft.com/en-us/azure/data-api-builder/configuration/runtime>
 
 - Data API Builder — REST endpoints  
-  https://learn.microsoft.com/en-us/azure/data-api-builder/concept/rest/overview
+  <https://learn.microsoft.com/en-us/azure/data-api-builder/concept/rest/overview>
 
 - ASP.NET Core Module for IIS  
-  https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/aspnet-core-module
+  <https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/aspnet-core-module>
 
 - Host ASP.NET Core on Windows with IIS  
-  https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/
+  <https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/>
 
 - IIS / ASP.NET Core advanced configuration and sub-applications  
-  https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/advanced
+  <https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/advanced>
 
 ---
 
