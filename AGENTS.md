@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Agent skills
 
