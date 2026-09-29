@@ -480,3 +480,23 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Agents
+.agents/skills/**
+.agents/worktrees/**
+
+# Claude Code
+.claude/skills/**
+.claude/worktrees/**
+.claude/settings.local.json
+
+# Codex
+.codex/config.toml
+
+# Firecrawl, Playwright CLI, and Scratch directories
+.firecrawl/**
+.playwright-cli/**
+.scratch/**
+
+# Keep .gitkeep files in the repository
+!**/.gitkeep
