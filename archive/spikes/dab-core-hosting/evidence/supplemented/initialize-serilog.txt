@@ -1,0 +1,23 @@
+Configured database: northwind; connection details suppressed.
+System.IO.FileNotFoundException: Could not load file or assembly 'Humanizer, Version=2.14.0.0, Culture=neutral, PublicKeyToken=979442b78dfc278e'. The system cannot find the file specified.
+File name: 'Humanizer, Version=2.14.0.0, Culture=neutral, PublicKeyToken=979442b78dfc278e'
+   at Azure.DataApiBuilder.Config.ObjectModel.RuntimeEntities.ProcessGraphQLDefaults(String entityName, Entity entity)
+   at Azure.DataApiBuilder.Config.ObjectModel.RuntimeEntities..ctor(IReadOnlyDictionary`2 entities)
+   at Azure.DataApiBuilder.Config.Converters.RuntimeEntitiesConverter.Read(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options)
+   at System.Text.Json.Serialization.JsonConverter`1.TryRead(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options, ReadStack& state, T& value, Boolean& isPopulatedValue)
+   at System.Text.Json.Serialization.JsonConverter`1.TryReadAsObject(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options, ReadStack& state, Object& value)
+   at System.Text.Json.Serialization.Converters.LargeObjectWithParameterizedConstructorConverter`1.ReadAndCacheConstructorArgument(ReadStack& state, Utf8JsonReader& reader, JsonParameterInfo jsonParameterInfo)
+   at System.Text.Json.Serialization.Converters.ObjectWithParameterizedConstructorConverter`1.OnTryRead(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options, ReadStack& state, T& value)
+   at System.Text.Json.Serialization.JsonConverter`1.TryRead(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options, ReadStack& state, T& value, Boolean& isPopulatedValue)
+   at System.Text.Json.Serialization.JsonConverter`1.ReadCore(Utf8JsonReader& reader, T& value, JsonSerializerOptions options, ReadStack& state)
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.Deserialize(Utf8JsonReader& reader, ReadStack& state)
+   at System.Text.Json.JsonSerializer.ReadFromSpan[TValue](ReadOnlySpan`1 utf8Json, JsonTypeInfo`1 jsonTypeInfo, Nullable`1 actualByteCount)
+   at System.Text.Json.JsonSerializer.ReadFromSpan[TValue](ReadOnlySpan`1 json, JsonTypeInfo`1 jsonTypeInfo)
+   at System.Text.Json.JsonSerializer.Deserialize[TValue](String json, JsonSerializerOptions options)
+   at Azure.DataApiBuilder.Config.RuntimeConfigLoader.TryParseConfig(String json, RuntimeConfig& config, String& parseError, DeserializationVariableReplacementSettings replacementSettings, String connectionString)
+   at Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader.TryLoadConfig(String path, RuntimeConfig& config, ILogger logger, Nullable`1 isDevMode, DeserializationVariableReplacementSettings replacementSettings)
+   at Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader.TryLoadKnownConfig(RuntimeConfig& config, Boolean replaceEnvVar)
+   at Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider.GetConfig()
+   at Program.<Main>$(String[] args) in E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Program.cs:line 67
+Initialization failure: System.IO.FileNotFoundException
+Missing assembly: Humanizer, Version=2.14.0.0, Culture=neutral, PublicKeyToken=979442b78dfc278e

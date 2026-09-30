@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Microsoft.DataApiBuilder.Core</id>
+    <version>2.0.12</version>
+    <title>Microsoft.DataApiBuilder.Core</title>
+    <authors>Microsoft</authors>
+    <license type="file">LICENSE.txt</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <icon>nuget_icon.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://go.microsoft.com/fwlink/?linkid=2224253</projectUrl>
+    <description>Data API builder Core library for Azure Databases provides modern REST, GraphQL endpoints and MCP tools to your Azure Databases.</description>
+    <copyright>© Microsoft Corporation. All rights reserved.</copyright>
+    <tags>microsoft rest graphql mcp api azure sql mssql mysql pgsql postgresql azure-sql sqlserver nosql cosmosdb dataApiBuilder</tags>
+    <repository type="git" url="https://github.com/azure/data-api-builder" commit="0b38aa7cbf4118034ad8dee1f2712b1c4bac4c32" />
+    <dependencies>
+      <group targetFramework="net8.0">
+        <dependency id="Azure.Identity" version="1.17.1" exclude="Build,Analyzers" />
+        <dependency id="DotNetEnv" version="3.0.0" exclude="Build,Analyzers" />
+        <dependency id="HotChocolate" version="16.0.0" exclude="Build,Analyzers" />
+        <dependency id="HotChocolate.AspNetCore" version="16.0.0" exclude="Build,Analyzers" />
+        <dependency id="HotChocolate.AspNetCore.Authorization" version="16.0.0" exclude="Build,Analyzers" />
+        <dependency id="HotChocolate.Types.NodaTime" version="16.0.0" exclude="Build,Analyzers" />
+        <dependency id="MSTest.TestFramework" version="3.3.1" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.AspNetCore.Authentication.JwtBearer" version="8.0.10" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Azure.Cosmos" version="3.38.1" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Data.SqlClient" version="5.2.3" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration.Binder" version="9.0.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration.Json" version="9.0.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.IdentityModel.Validators" version="8.1.2" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.OData.Core" version="7.20.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.OData.Edm" version="7.20.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.OpenApi" version="1.6.14" exclude="Build,Analyzers" />
+        <dependency id="MySqlConnector" version="2.1.5" exclude="Build,Analyzers" />
+        <dependency id="Newtonsoft.Json" version="13.0.2" exclude="Build,Analyzers" />
+        <dependency id="Newtonsoft.Json.Schema" version="3.0.14" exclude="Build,Analyzers" />
+        <dependency id="Npgsql" version="8.0.3" exclude="Build,Analyzers" />
+        <dependency id="Polly" version="7.2.3" exclude="Build,Analyzers" />
+        <dependency id="Swashbuckle.AspNetCore.SwaggerUI" version="6.5.0" exclude="Build,Analyzers" />
+        <dependency id="System.IO.Abstractions" version="21.0.2" exclude="Build,Analyzers" />
+        <dependency id="ZiggyCreatures.FusionCache" version="2.1.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

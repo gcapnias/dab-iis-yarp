@@ -1,0 +1,15 @@
+Configured database: northwind; connection details suppressed.
+Runtime configuration loaded.
+Database metadata initialized.
+RestService activated.
+Azure.DataApiBuilder.Service.Exceptions.DataApiBuilderException: No ClientRoleHeader found in request context.
+   at Azure.DataApiBuilder.Core.Resolvers.AuthorizationPolicyHelpers.ProcessAuthorizationPolicies(EntityActionOperation operationType, BaseQueryStructure queryStructure, HttpContext context, IAuthorizationResolver authorizationResolver, ISqlMetadataProvider sqlMetadataProvider)
+   at Azure.DataApiBuilder.Core.Resolvers.BaseSqlQueryStructure..ctor(ISqlMetadataProvider metadataProvider, IAuthorizationResolver authorizationResolver, GQLFilterParser gQLFilterParser, List`1 predicates, String entityName, IncrementingInteger counter, HttpContext httpContext, EntityActionOperation operationType, Boolean isLinkingEntity)
+   at Azure.DataApiBuilder.Core.Resolvers.SqlQueryStructure..ctor(ISqlMetadataProvider metadataProvider, IAuthorizationResolver authorizationResolver, GQLFilterParser gQLFilterParser, IHeaderDictionary httpRequestHeaders, List`1 predicates, String entityName, IncrementingInteger counter, HttpContext httpContext)
+   at Azure.DataApiBuilder.Core.Resolvers.SqlQueryStructure..ctor(RestRequestContext context, ISqlMetadataProvider sqlMetadataProvider, IAuthorizationResolver authorizationResolver, RuntimeConfigProvider runtimeConfigProvider, GQLFilterParser gQLFilterParser, HttpContext httpContext)
+   at Azure.DataApiBuilder.Core.Resolvers.SqlQueryEngine.ExecuteAsync(FindRequestContext context)
+   at Azure.DataApiBuilder.Core.Services.RestService.DispatchQuery(RestRequestContext context, DatabaseType databaseType)
+   at Azure.DataApiBuilder.Core.Services.RestService.ExecuteAsync(String entityName, EntityActionOperation operationType, String primaryKeyRoute)
+   at Program.<>c.<<<Main>$>b__0_5>d.MoveNext() in E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Program.cs:line 89
+--- End of stack trace from previous location ---
+   at Program.<>c__DisplayClass0_0.<<<Main>$>b__3>d.MoveNext() in E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Program.cs:line 75

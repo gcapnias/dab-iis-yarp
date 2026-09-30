@@ -1,0 +1,9 @@
+  Determining projects to restore...
+  Restored E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Host.csproj (in 721 ms).
+  Host -> E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\bin\Debug\net8.0\Host.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:04.43

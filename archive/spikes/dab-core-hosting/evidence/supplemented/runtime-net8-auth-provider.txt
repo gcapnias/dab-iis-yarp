@@ -1,0 +1,14 @@
+Configured database: northwind; connection details suppressed.
+Runtime configuration loaded.
+Database metadata initialized.
+RestService activated.
+System.InvalidOperationException: No authentication handler is registered for the scheme 'OAuthAuthentication'. The registered schemes are: UnauthenticatedAuthentication. Did you forget to call AddAuthentication().Add[SomeAuthHandler]("OAuthAuthentication",...)?
+   at Microsoft.AspNetCore.Authentication.AuthenticationService.AuthenticateAsync(HttpContext context, String scheme)
+   at Azure.DataApiBuilder.Core.AuthenticationHelpers.ClientRoleHeaderAuthenticationMiddleware.InvokeAsync(HttpContext httpContext)
+   at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+   at Program.<>c__DisplayClass0_0.<<<Main>$>b__3>d.MoveNext() in E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Program.cs:line 78
+System.InvalidOperationException: No authentication handler is registered for the scheme 'OAuthAuthentication'. The registered schemes are: UnauthenticatedAuthentication. Did you forget to call AddAuthentication().Add[SomeAuthHandler]("OAuthAuthentication",...)?
+   at Microsoft.AspNetCore.Authentication.AuthenticationService.AuthenticateAsync(HttpContext context, String scheme)
+   at Azure.DataApiBuilder.Core.AuthenticationHelpers.ClientRoleHeaderAuthenticationMiddleware.InvokeAsync(HttpContext httpContext)
+   at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+   at Program.<>c__DisplayClass0_0.<<<Main>$>b__3>d.MoveNext() in E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Program.cs:line 78
