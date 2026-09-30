@@ -6,7 +6,7 @@ status: accepted
 
 Proceed with specifying an ASP.NET Core application that hosts the real DAB Core engine in the same process through application-owned bootstrap and HTTP adapters. The user accepts ownership of this integration layer, supplemental dependency pins, and upgrade validation to preserve the required single-application access boundary despite the absence of an established upstream-supported embedding contract.
 
-The application must expose all REST and GraphQL endpoints, operations, and permissions enabled by DAB configuration. Configuration changes may require an application restart but must not require recompilation. MCP is optional. The final target framework and package policy remain a separate decision.
+The application must expose all REST and GraphQL endpoints, operations, and permissions enabled by DAB configuration. Configuration changes may require an application restart but must not require recompilation. MCP is optional. The target framework and package policy are recorded in [ADR-0002](0002-net10-and-proven-dab-core-baseline.md).
 
 This is a conditional go for specification, not production readiness. The Core 2.0.12 spike demonstrated a fixed anonymous Products read adapter on .NET 8 and .NET 10; it did not demonstrate configuration-driven endpoint changes after restart or GraphQL hosting. These requirements need a further proof before the architecture is considered fully validated. Security, lifecycle, deployment under IIS, and the final acceptance matrix remain subsequent planning and validation gates.
 

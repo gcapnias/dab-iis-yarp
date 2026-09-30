@@ -1,0 +1,13 @@
+---
+status: accepted
+---
+
+# .NET 10 with the proven DAB Core baseline
+
+Target the integrated DAB application at `net10.0` and pin `Microsoft.DataApiBuilder.Core` to `2.0.12`, retaining the supplemental dependency pins established by the archived spike as the initial proof baseline. .NET 8 support ends November 10, 2026, while .NET 10 support ends November 14, 2028; the separate identity issuer already targets .NET 10. Although Core 2.0.12 targets .NET 8, the repository demonstrated its minimal same-process SQL read and shutdown on .NET 10. This evidence does not establish full configuration-driven REST, GraphQL, JWT, or deployment behavior.
+
+Retain Core 2.0.12 while it satisfies the required .NET 10 application proofs. If a proof fails, diagnose whether the cause is the Core package, a supplemental dependency, or the application-owned integration before changing versions. A diagnosed package limitation or incompatibility triggers evaluation of an exact pinned 2.1 RC; a failure in the application adapter alone does not trigger a package upgrade. As verified on September 30, 2026, `2.1.4-rc` is the available RC candidate and its package assets target only .NET 10. This ADR does not adopt or claim runtime compatibility for that candidate.
+
+Accept a replacement package only after rechecking its dependency requirements and repeating the required .NET 10 configuration-driven REST, GraphQL, JWT authentication and authorization, and lifecycle checks. Preserve the original baseline evidence. Revisit this version decision when a required proof exposes a package limitation or incompatibility, or when framework/package support or security requirements invalidate the chosen baseline. Changing the same-process integration boundary remains a separate user decision under ADR-0001.
+
+Decision ticket: [Choose the .NET target and DAB package pin](https://github.com/gcapnias/dab-iis-yarp/issues/8). Evidence: [archived Core hosting proof](../../archive/research/dab-core-hosting/README.md), [supplemented host package pins](../../archive/spikes/dab-core-hosting/Host/Host.csproj), [Microsoft .NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core), [Core 2.0.12 package metadata](https://www.nuget.org/packages/Microsoft.DataApiBuilder.Core/2.0.12), and [Core 2.1.4-rc package metadata](https://www.nuget.org/packages/Microsoft.DataApiBuilder.Core/2.1.4-rc).
