@@ -2,6 +2,16 @@
 
 Validated on 2026-09-30 with `Microsoft.DataApiBuilder.Core` 2.0.12, .NET 8.0.31 and .NET 10.0.12 against Northwind. The [research report](../../archive/research/dab-core-hosting/README.md) contains results and evidence. This runbook reproduces a web application with its own endpoint and a custom Products read adapter using DAB's engine in the same process.
 
+## Current application baseline
+
+The accepted [framework and package decision](../adr/0002-net10-and-proven-dab-core-baseline.md) selects `net10.0` with Core `2.0.12` for new application work, retaining the four supplemental dependency pins below. The archived .NET 8 instructions reproduce the original package-target proof; they are not the target recommendation for the new application.
+
+The [integration decision](../adr/0001-conditional-same-process-dab-integration.md) accepts application-owned bootstrap, HTTP adapters, dependency pins, and upgrade validation. The required next proof is configuration-driven REST and GraphQL access, including configured operations and permissions, with changes taking effect after restart without recompilation. The fixed Products adapter below does not yet meet that requirement.
+
+JWTs will come from a separate .NET 10 identity issuer. The embedded application must validate them and enforce DAB permissions through REST and GraphQL. The anonymous bootstrap below does not implement that security contract. The next preferred map ticket is the [Windows Authentication issuer research and prototype](https://github.com/gcapnias/dab-iis-yarp/issues/11), covering existing-database Profile/Roles lookup, JWT/discovery and cookie delivery, and an issuer creation runbook. The [configuration-driven API proof](https://github.com/gcapnias/dab-iis-yarp/issues/9) may run independently. The [final interoperability proof](https://github.com/gcapnias/dab-iis-yarp/issues/10) reuses both prototypes and verifies the embedded host's cookie-to-token bridge and real DAB authentication/permissions through REST and GraphQL. Issuer-side completion alone does not establish DAB compatibility.
+
+If a required proof fails, diagnose the package, supplemental dependencies, and application adapter before changing versions. A demonstrated package limitation or incompatibility permits evaluation of an exact pinned 2.1 RC and repetition of the required proofs; no RC is adopted by this runbook. Preserve the same-process boundary and original evidence.
+
 ## Prerequisites
 
 - For the archived multi-target project, install a .NET 10 SDK and the .NET 8 and .NET 10 ASP.NET Core runtimes. The recorded builds used SDK 10.0.401. A new project targeting only .NET 8 can use its matching SDK/runtime.
@@ -76,24 +86,24 @@ dotnet run --project Host.csproj --framework net10.0 --no-build -- --verify --ur
 Remove-Item Env:DAB_ENV_FILE -ErrorAction SilentlyContinue
 ```
 
-The recorded runs passed on both frameworks. This does not determine the eventual application's target framework policy.
+The recorded runs passed on both frameworks. ADR-0002 subsequently selected .NET 10 for the application; the two-framework reproduction remains useful baseline evidence.
 
 ## Start a new project from this configuration
 
 From the repository root, create a web project and seed it from the independently authored bootstrap and configuration:
 
 ```powershell
-dotnet new web --name NorthwindDab --output src/NorthwindDab --framework net8.0 --no-restore
+dotnet new web --name NorthwindDab --output src/NorthwindDab --framework net10.0 --no-restore
 Copy-Item archive/spikes/dab-core-hosting/Host/Program.cs src/NorthwindDab/Program.cs
 Copy-Item archive/spikes/dab-core-hosting/Host/dab-config.json src/NorthwindDab/dab-config.json
 ```
 
-Set the new project's package references to the following exact tested set. Use `net8.0` initially; use `net8.0;net10.0` in `TargetFrameworks` if reproducing the two-framework comparison.
+Set the new project's package references to the following exact tested set and target `net10.0`, as selected by ADR-0002. Use the archived multi-target project above when reproducing the original .NET 8/.NET 10 comparison.
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
