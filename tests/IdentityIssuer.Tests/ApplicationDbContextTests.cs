@@ -7,6 +7,16 @@ namespace IdentityIssuer.Tests;
 public sealed class ApplicationDbContextTests
 {
     [Fact]
+    public void Northwind_connection_validator_rejects_other_catalogs_without_connecting()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            IssuerIdentityDatabase.ValidateNorthwindConnectionString(
+                "Server=(local);Database=master;Integrated Security=true;TrustServerCertificate=true"));
+
+        Assert.Contains("Northwind", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Identity_tables_use_a_dedicated_schema_and_unique_external_mapping_keys()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

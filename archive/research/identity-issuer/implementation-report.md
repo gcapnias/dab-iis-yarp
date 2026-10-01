@@ -16,7 +16,7 @@ The .NET 10 issuer prototype is implemented and passes its fixture-level validat
 - `/session` sets `dab_access_token` as a host-only `HttpOnly`, `Secure`, `SameSite=Lax` cookie by default, with the same expiry as the JWT. Optional domain scope is a deployment choice. `/csrf` issues an antiforgery request token; session and logout POSTs require it in `X-CSRF-TOKEN`. Logout expires the cookie.
 - The generated Identity schema is isolated under SQL Server schema `IdentityIssuer`; tables are the standard ASP.NET Identity tables and EF history table, with unique SID and profile ID indexes. `dotnet ef database update` is never run automatically.
 
-The project and complete creation/verification instructions are in [the runbook](../../../docs/runbooks/windows-authentication-jwt-issuer.md). Primary-source framework/protocol research is in [the Windows/JWT/cookie note](../aspnet-windows-jwt-cookie-contracts.md) and [the .NET 10 Identity/SQL Server note](../aspnet-identity-net10-issuer.md). The latter research note is in the separate `research/11-identity-net10` commit `723fd9bb385731982df5370cb3cb405fb2aa96a0` and must be included in the final delivery branch.
+The project and complete creation/verification instructions are in [the runbook](../../../docs/runbooks/windows-authentication-jwt-issuer.md). Primary-source framework/protocol research is in [the Windows/JWT/cookie note](../aspnet-windows-jwt-cookie-contracts.md) and [the .NET 10 Identity/SQL Server note](../aspnet-identity-net10-issuer.md). The Identity research was authored in commit `723fd9bb385731982df5370cb3cb405fb2aa96a0` and is present on local `develop` at `13bbe1b`; deliver this implementation onto that branch so the relative research link resolves.
 
 ## Validation performed
 
@@ -39,7 +39,8 @@ No credential, signing key, JWT, actual SID, display name, or database row has b
 
 - Issuer-side identity/claims mechanics are internally testable and the implementation fails closed for unknown mappings and missing roles.
 - Full issuer proof is not green because the Windows authentication and SQL Server chain was not exercised. Current machine-specific environment does not establish those prerequisites.
-- The metadata endpoint supplies the issuer and JWKS needed for DAB's documented discovery path. It is not a general OIDC interactive authorization server: there is no authorization-code or token endpoint. DAB's exact discovery/validation behavior with this issuer remains for ticket #10.
+- The discovery-shaped endpoint is minimal DAB-oriented key metadata (`issuer` and `jwks_uri`), not a complete OpenID Connect Discovery document or general OIDC interactive authorization server. There is no authorization-code or token endpoint. DAB's exact metadata/token validation behavior with this issuer remains for ticket #10.
+- Ticket #11's OpenID Connect discovery wording is therefore only partially satisfied if it requires a complete OIDC Provider discovery contract. This implementation limits itself to the DAB-oriented issuer/JWKS metadata; confirm the intended contract before claiming that acceptance item complete.
 - Only one signing key is published at a time; automated overlapping-key rotation, revocation, and production key custody are outside this spike.
 - The `profile_id` and `name` claims are informational in the prototype. DAB authorization based on them requires explicit policy and later interoperability proof.
 - Cookie interoperability depends on the final host names and browser origin arrangement. The default host-only cookie may need an intentionally shared parent-domain scope; no actual deployment topology was available. Ticket #10 must verify scope, CSRF, and cookie-to-bearer forwarding.

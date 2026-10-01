@@ -6,12 +6,14 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Server.IISIntegration;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 
-const string provisioningFlag = "--provision-identity";
-var provisioningMode = args.Contains(provisioningFlag, StringComparer.OrdinalIgnoreCase);
-var builder = WebApplication.CreateBuilder(args.Where(argument => !string.Equals(argument, provisioningFlag, StringComparison.OrdinalIgnoreCase)).ToArray());
+if (IdentityProvisioningCommand.IsRequested(args))
+{
+    await IdentityProvisioningCommand.RunAsync(args);
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(args);
 var issuer = builder.Configuration["Issuer:Url"] ?? throw new InvalidOperationException("Issuer:Url is required.");
 var audience = builder.Configuration["Issuer:Audience"] ?? throw new InvalidOperationException("Issuer:Audience is required.");
 var keyId = builder.Configuration["Issuer:KeyId"] ?? throw new InvalidOperationException("Issuer:KeyId is required.");
@@ -25,12 +27,6 @@ var authenticationMode = builder.Configuration["WindowsAuthentication:Mode"] ?? 
 if (string.IsNullOrWhiteSpace(audience) || string.IsNullOrWhiteSpace(keyId))
 {
     throw new InvalidOperationException("Issuer:Audience and Issuer:KeyId must be non-empty.");
-}
-
-var sqlConnection = new SqlConnectionStringBuilder(connectionString);
-if (!string.Equals(sqlConnection.InitialCatalog, "northwind", StringComparison.OrdinalIgnoreCase))
-{
-    throw new InvalidOperationException("ConnectionStrings:IssuerIdentity must target the Northwind database.");
 }
 
 if (!Uri.TryCreate(issuer, UriKind.Absolute, out var issuerUri) ||
@@ -58,11 +54,8 @@ builder.Services.AddSingleton<RSA>(_ =>
 });
 builder.Services.AddSingleton(new IssuerSettings(issuer, audience, keyId, TimeSpan.FromMinutes(lifetimeMinutes), cookieName, cookieDomain));
 builder.Services.AddSingleton<JwtIssuer>();
-builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString,
-    sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", ApplicationDbContext.IdentitySchema)));
-builder.Services.AddIdentityCore<ApplicationUser>()
-    .AddRoles<IdentityRole>()
-    .AddEntityFrameworkStores<ApplicationDbContext>();
+builder.Services.AddIssuerIdentityDatabase(connectionString);
+builder.Services.AddIssuerIdentityStores();
 builder.Services.AddScoped<IIdentityDirectory, AspNetIdentityDirectory>();
 builder.Services.AddScoped<IdentityProfileResolver>();
 builder.Services.AddScoped<IdentityProvisioner>();
@@ -97,14 +90,6 @@ app.UseAuthorization();
 var issuerPath = issuerUri.AbsolutePath.TrimEnd('/');
 var discoveryPath = $"{issuerPath}/.well-known/openid-configuration";
 var jwksPath = $"{issuerPath}/.well-known/jwks.json";
-
-if (provisioningMode)
-{
-    await using var scope = app.Services.CreateAsyncScope();
-    var provisioner = scope.ServiceProvider.GetRequiredService<IdentityProvisioner>();
-    await RunProvisioningPromptAsync(provisioner);
-    return;
-}
 
 app.MapGet(discoveryPath, (IssuerSettings settings) => Results.Json(new
 {
@@ -158,22 +143,6 @@ app.MapPost($"{issuerPath}/session/logout", async (HttpContext context, IAntifor
 }).RequireAuthorization();
 
 app.Run();
-
-static async Task RunProvisioningPromptAsync(IdentityProvisioner provisioner)
-{
-    Console.WriteLine("Create an Identity profile mapped to a Windows SID. This local command grants only the roles entered by the operator.");
-    Console.Write("Windows SID: ");
-    var sid = Console.ReadLine() ?? string.Empty;
-    Console.Write("Profile ID: ");
-    var profileId = Console.ReadLine() ?? string.Empty;
-    Console.Write("Display name (optional): ");
-    var displayName = Console.ReadLine();
-    Console.Write("Roles (comma separated): ");
-    var roles = (Console.ReadLine() ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-
-    await provisioner.ProvisionAsync(sid, profileId, displayName, roles);
-    Console.WriteLine("Identity profile provisioned.");
-}
 
 static async Task<bool> ValidateAntiforgeryAsync(HttpContext context, IAntiforgery antiforgery)
 {
