@@ -4,6 +4,7 @@ using IdentityIssuer;
 
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Server.IISIntegration;
 
@@ -81,7 +82,12 @@ else
     throw new InvalidOperationException("WindowsAuthentication:Mode must be IIS or Negotiate.");
 }
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseAuthentication();
@@ -95,15 +101,15 @@ app.MapGet(discoveryPath, (IssuerSettings settings) => Results.Json(new
 {
     issuer = settings.Issuer,
     jwks_uri = $"{settings.Issuer.TrimEnd('/')}/.well-known/jwks.json",
-}));
+})).AllowAnonymous();
 
-app.MapGet(jwksPath, (JwtIssuer tokens) => Results.Json(tokens.CreatePublicKeySet()));
+app.MapGet(jwksPath, (JwtIssuer tokens) => Results.Json(tokens.CreatePublicKeySet())).AllowAnonymous();
 
 app.MapGet($"{issuerPath}/csrf", (HttpContext context, IAntiforgery antiforgery) =>
 {
     var tokens = antiforgery.GetAndStoreTokens(context);
     return Results.Json(new { requestToken = tokens.RequestToken });
-});
+}).RequireAuthorization();
 
 app.MapPost($"{issuerPath}/session", async (HttpContext context, IAntiforgery antiforgery, IdentityProfileResolver profiles, JwtIssuer tokens, IssuerSettings settings) =>
 {

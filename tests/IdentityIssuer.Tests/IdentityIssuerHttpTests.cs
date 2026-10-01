@@ -1,8 +1,12 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+
 using IdentityIssuer;
+
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -12,7 +16,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.Encodings.Web;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 
 namespace IdentityIssuer.Tests;
 
@@ -24,6 +30,30 @@ public sealed class IdentityIssuerHttpTests : IClassFixture<IdentityIssuerFactor
     {
         client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true, AllowAutoRedirect = false });
         client.BaseAddress = new Uri("https://localhost");
+    }
+
+    [Fact]
+    public async Task Only_discovery_and_signing_keys_are_anonymous()
+    {
+        using var discovery = new HttpRequestMessage(HttpMethod.Get, "/.well-known/openid-configuration");
+        discovery.Headers.Add("X-Test-Anonymous", "true");
+        using var discoveryResponse = await client.SendAsync(discovery);
+        Assert.Equal(HttpStatusCode.OK, discoveryResponse.StatusCode);
+
+        using var jwks = new HttpRequestMessage(HttpMethod.Get, "/.well-known/jwks.json");
+        jwks.Headers.Add("X-Test-Anonymous", "true");
+        using var jwksResponse = await client.SendAsync(jwks);
+        Assert.Equal(HttpStatusCode.OK, jwksResponse.StatusCode);
+
+        using var csrf = new HttpRequestMessage(HttpMethod.Get, "/csrf");
+        csrf.Headers.Add("X-Test-Anonymous", "true");
+        using var csrfResponse = await client.SendAsync(csrf);
+        Assert.Equal(HttpStatusCode.Unauthorized, csrfResponse.StatusCode);
+
+        using var session = new HttpRequestMessage(HttpMethod.Post, "/session");
+        session.Headers.Add("X-Test-Anonymous", "true");
+        using var sessionResponse = await client.SendAsync(session);
+        Assert.Equal(HttpStatusCode.Unauthorized, sessionResponse.StatusCode);
     }
 
     [Fact]
@@ -40,6 +70,52 @@ public sealed class IdentityIssuerHttpTests : IClassFixture<IdentityIssuerFactor
         using var keys = JsonDocument.Parse(await keyResponse.Content.ReadAsStringAsync());
         Assert.Equal(1, keys.RootElement.GetProperty("keys").GetArrayLength());
         Assert.False(keys.RootElement.GetProperty("keys")[0].TryGetProperty("d", out _));
+    }
+
+    [Fact]
+    public async Task IdentityModel_retrieves_discovery_and_validates_the_issued_token_with_published_keys()
+    {
+        var issuer = "https://issuer.example.test";
+        using var retrievalClient = new HttpClient(new TestServerForwarder(client));
+        var documentRetriever = new HttpDocumentRetriever(retrievalClient) { RequireHttps = true };
+        var manager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            issuer + "/.well-known/openid-configuration",
+            new OpenIdConnectConfigurationRetriever(),
+            documentRetriever);
+
+        var configuration = await manager.GetConfigurationAsync(CancellationToken.None);
+        Assert.Equal(issuer, configuration.Issuer);
+        Assert.Contains(configuration.SigningKeys, key => key.KeyId == "test-key");
+
+        using var csrfResponse = await client.GetAsync("/csrf");
+        using var csrf = JsonDocument.Parse(await csrfResponse.Content.ReadAsStringAsync());
+        using var session = new HttpRequestMessage(HttpMethod.Post, "/session");
+        session.Headers.Add("X-CSRF-TOKEN", csrf.RootElement.GetProperty("requestToken").GetString());
+        using var sessionResponse = await client.SendAsync(session);
+        Assert.Equal(HttpStatusCode.NoContent, sessionResponse.StatusCode);
+        var cookie = Assert.Single(sessionResponse.Headers.GetValues("Set-Cookie"));
+        var token = cookie.Split(';')[0]["dab_access_token=".Length..];
+
+        var validator = new JwtSecurityTokenHandler { MapInboundClaims = false };
+        var validation = new TokenValidationParameters
+        {
+            ValidIssuer = issuer,
+            ValidAudience = "api://northwind-dab",
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKeys = configuration.SigningKeys,
+            ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+            ClockSkew = TimeSpan.Zero
+        };
+        var principal = validator.ValidateToken(token, validation, out var validatedToken);
+        Assert.Equal("test-user", principal.FindFirst("sub")?.Value);
+        Assert.Equal("test-key", Assert.IsType<JwtSecurityToken>(validatedToken).Header.Kid);
+
+        var tokenParts = token.Split('.');
+        tokenParts[2] = tokenParts[2][..^1] + (tokenParts[2][^1] == 'A' ? 'B' : 'A');
+        Assert.ThrowsAny<SecurityTokenException>(() => validator.ValidateToken(string.Join('.', tokenParts), validation, out _));
     }
 
     [Fact]
@@ -94,6 +170,20 @@ public sealed class IdentityIssuerHttpTests : IClassFixture<IdentityIssuerFactor
     {
         var base64 = value.Replace('-', '+').Replace('_', '/');
         return Convert.FromBase64String(base64.PadRight(base64.Length + ((4 - base64.Length % 4) % 4), '='));
+    }
+}
+
+public sealed class TestServerForwarder(HttpClient testServerClient) : HttpMessageHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        using var forwarded = new HttpRequestMessage(request.Method, request.RequestUri!.PathAndQuery);
+        using var response = await testServerClient.SendAsync(forwarded, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return new HttpResponseMessage(response.StatusCode)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        };
     }
 }
 
@@ -168,6 +258,11 @@ public sealed class TestAuthenticationHandler(
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.ContainsKey("X-Test-Anonymous"))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.PrimarySid, "S-1-5-21-10-20-30-1001")], Scheme.Name);
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name);
         return Task.FromResult(AuthenticateResult.Success(ticket));
