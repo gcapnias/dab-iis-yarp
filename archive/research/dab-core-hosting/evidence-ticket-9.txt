@@ -53,7 +53,7 @@ PASS GraphQL schema rejects the specific permission-denied create field
 PASS initial configuration exposes RetiredWidget through REST
 PASS REST rejects paths that only share the configured path prefix
 PASS initial configuration does not expose Label
-PASS configuration-only path change exposes the same Widget entity at its new route (status 200, body {"value":[{"id":1,"name":"put-update-only","quantity":11},{"id":2,"name":"fixture-two","quantity":22}],"nextLink":"http://127.0.0.1:62381/v2/catalog/widgets?$first=2&$after=W3siRW50aXR5TmFtZSI6IldpZGdldCIsIkZpZWxkTmFtZSI6ImlkIiwiRmllbGRWYWx1ZSI6MiwiRGlyZWN0aW9uIjowfV0="})
+PASS configuration-only path change exposes the same Widget entity at its new route (status 200, body {"value":[{"id":1,"name":"put-update-only","quantity":11},{"id":2,"name":"fixture-two","quantity":22}],"nextLink":"http://127.0.0.1:49401/v2/catalog/widgets?$first=2&$after=W3siRW50aXR5TmFtZSI6IldpZGdldCIsIkZpZWxkTmFtZSI6ImlkIiwiRmllbGRWYWx1ZSI6MiwiRGlyZWN0aW9uIjowfV0="})
 PASS expanded REST adapter is served by the restarted host process
 PASS previous REST base path is inactive after restart
 PASS expanded REST path rejects prefix collisions without a segment boundary

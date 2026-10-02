@@ -55,9 +55,19 @@ function Get-Response([string]$method, [string]$path, [string]$role = 'anonymous
     return [pscustomobject]@{ Status = [int]$response.StatusCode; Body = $body; ProcessId = $responseProcessId }
 }
 
-function Assert-DeletedRow($response, [string]$description) {
-    $rows = if ($response.Status -eq 200) { @((($response.Body | ConvertFrom-Json).value)) } else { @() }
-    $isAbsent = $response.Status -eq 404 -or ($response.Status -eq 200 -and $rows.Count -eq 0)
+function Assert-RowAbsent($response, [string]$description) {
+    $hasEmptyValueArray = $false
+    if ($response.Status -eq 200) {
+        try {
+            $payload = $response.Body | ConvertFrom-Json -ErrorAction Stop
+            $valueProperty = $payload.PSObject.Properties['value']
+            $hasEmptyValueArray = $null -ne $valueProperty -and $null -ne $valueProperty.Value -and $valueProperty.Value -is [System.Array] -and $valueProperty.Value.Count -eq 0
+        } catch {
+            $hasEmptyValueArray = $false
+        }
+    }
+
+    $isAbsent = $response.Status -eq 404 -or ($response.Status -eq 200 -and $hasEmptyValueArray)
     Assert-True $isAbsent "$description (status $($response.Status), body $($response.Body))"
 }
 
@@ -153,10 +163,10 @@ try {
 
     $missingPutIfMatch = Get-Response 'PUT' '/api/Widget/id/7' 'anonymous' '{"id":7,"name":"must-not-insert-put","quantity":7}' @{ 'If-Match' = '*' }
     Assert-True ($missingPutIfMatch.Status -eq 400) "If-Match PUT rejects a missing key (status $($missingPutIfMatch.Status), body $($missingPutIfMatch.Body))"
-    Assert-DeletedRow (Get-Response 'GET' '/api/Widget/id/7') 'If-Match PUT does not insert a missing key'
+    Assert-RowAbsent (Get-Response 'GET' '/api/Widget/id/7') 'If-Match PUT does not insert a missing key'
     $missingPatchIfMatch = Get-Response 'PATCH' '/api/Widget/id/8' 'anonymous' '{"id":8,"name":"must-not-insert-patch","quantity":8}' @{ 'If-Match' = '*' }
     Assert-True ($missingPatchIfMatch.Status -eq 400) "If-Match PATCH rejects a missing key (status $($missingPatchIfMatch.Status), body $($missingPatchIfMatch.Body))"
-    Assert-DeletedRow (Get-Response 'GET' '/api/Widget/id/8') 'If-Match PATCH does not insert a missing key'
+    Assert-RowAbsent (Get-Response 'GET' '/api/Widget/id/8') 'If-Match PATCH does not insert a missing key'
 
     $invalidPutIfMatch = Get-Response 'PUT' '/api/Widget/id/1' 'anonymous' '{"id":1,"name":"invalid-put-mutated","quantity":99}' @{ 'If-Match' = '"unsupported-etag"' }
     Assert-True ($invalidPutIfMatch.Status -eq 400) "If-Match PUT rejects entity tags (status $($invalidPutIfMatch.Status), body $($invalidPutIfMatch.Body))"
@@ -179,7 +189,7 @@ try {
     $deleted = Get-Response 'DELETE' '/api/Widget/id/3'
     Assert-True ($deleted.Status -in @(200, 204)) 'configured delete operation removes the fixture row'
     $afterDelete = Get-Response 'GET' '/api/Widget/id/3'
-    Assert-DeletedRow $afterDelete 'DELETE removes the fixture row from subsequent reads'
+    Assert-RowAbsent $afterDelete 'DELETE removes the fixture row from subsequent reads'
     $denied = Get-Response 'POST' '/api/RetiredWidget' 'anonymous' '{"name":"denied"}'
     Assert-True ($denied.Status -in @(401, 403)) "per-entity REST permissions reject unconfigured create (status $($denied.Status), body $($denied.Body))"
     $gql = Assert-GraphQL '/graphql' '{ widgets(first: 2) { items { id name quantity } } }' 'anonymous' 'configured GraphQL query'
@@ -191,7 +201,7 @@ try {
     $deleteWidget = Assert-GraphQL '/graphql' 'mutation { deleteWidget(id: 4) { id } }' 'anonymous' 'configured GraphQL delete mutation'
     Assert-True ($deleteWidget.data.deleteWidget.id -eq 4) 'GraphQL delete mutation returns the deleted fixture key'
     $afterGraphQLDelete = Get-Response 'GET' '/api/Widget/id/4'
-    Assert-DeletedRow $afterGraphQLDelete 'GraphQL delete mutation removes the fixture row'
+    Assert-RowAbsent $afterGraphQLDelete 'GraphQL delete mutation removes the fixture row'
     $retiredMutation = Get-Response 'POST' '/graphql' 'anonymous' ('{"query":"mutation { createRetiredWidget(item: { name: \"denied\" }) { id } }"}')
     $retiredMutationErrors = (($retiredMutation.Body | ConvertFrom-Json).errors | ForEach-Object { $_.message }) -join ' '
     Assert-True ($retiredMutationErrors -match 'createRetiredWidget' -and $retiredMutationErrors -match 'does not exist') 'GraphQL schema rejects the specific permission-denied create field'
