@@ -4,6 +4,17 @@ This standalone ASP.NET Core 10 app authenticates a Windows request, maps the re
 
 Primary-source research: [.NET 10 Identity and SQL Server](../../archive/research/aspnet-identity-net10-issuer.md), [Windows request-principal SID binding](../../archive/research/identity-issuer/windows-principal-identity-binding.md), [OpenIddict discovery and OIDC client behavior](../../archive/research/identity-issuer/discovery-implementation-details.md), and the [user-supplied Windows Authentication artifact](../../archive/research/windows-authentication-in-net-identity.md). The complete current schema script is [here](../../archive/research/identity-issuer/IdentityIssuer-current-idempotent.sql); live Kestrel/SQL evidence is [here](../../archive/research/identity-issuer/live-proof-2026-10-02.md).
 
+## Project creation and reproducible build
+
+The delivered prototype is [src/IdentityIssuer](../../src/IdentityIssuer/IdentityIssuer.csproj) on `develop`. With the existing .NET 10 SDK, restore and build that source:
+
+```powershell
+dotnet restore src/IdentityIssuer/IdentityIssuer.csproj
+dotnet build src/IdentityIssuer/IdentityIssuer.csproj --configuration Release --no-restore
+```
+
+To create a separate starting shell, use `dotnet new web --framework net10.0 --name IdentityIssuer --output <new-directory>`. The template alone is not the issuer: use the delivered project file's exact package pins and bring across its application source, configuration and reviewed migrations. The project pins Negotiate, ASP.NET Core Identity EF stores and EF Core SQL Server/Design to `10.0.12`, and OpenIddict ASP.NET Core/EF Core to `7.7.1`. The delivered tests under `tests/IdentityIssuer.Tests` provide the regression baseline. Restore/build do not provision database accounts, apply migrations or create signing keys; complete the configuration and explicit operator steps below before starting the application.
+
 ## Local configuration and startup
 
 The tracked [appsettings.json](../../src/IdentityIssuer/appsettings.json) contains safe local defaults for issuer URL/audience, cookies, Negotiate, key paths, lifetime, and the local public OIDC client. It contains no database credential or signing material. Supply `ConnectionStrings:IssuerIdentity` from the authorized local environment variable, .NET user secrets, or the primary checkout's ignored `.env` file. The startup script reads that file into process memory without printing it.
@@ -80,8 +91,7 @@ Run automated tests and the real local HTTP integration harness:
 
 ```powershell
 dotnet test tests/IdentityIssuer.Tests/IdentityIssuer.Tests.csproj
-.
-scripts\test-identity-issuer.ps1
+.\scripts\test-identity-issuer.ps1
 ```
 
 The harness uses PowerShell 7 `UseDefaultCredentials` for Windows Negotiate and skips certificate validation only for `https://localhost` (the development certificate chain and subject are not validated by that client). It prints HTTP statuses, identity runtime type, and SID-presence booleans. It never prints a SID, account/profile value, code, cookie, JWT, refresh token, or connection string. It checks anonymous discovery/JWKS, anonymous denial, antiforgery, secure cookie flags, JWT signature/issuer/audience/lifetime/claims, refresh rotation/replay/logout, and a full Windows-authenticated authorization-code/PKCE/token/refresh flow.
@@ -140,6 +150,6 @@ The browser check validates discovery issuer, Windows request identity type/SID-
 
 The current live record is [live-proof-2026-10-02.md](../../archive/research/identity-issuer/live-proof-2026-10-02.md), with the requirement coverage matrix in [implementation-report.md](../../archive/research/identity-issuer/implementation-report.md). Real Kestrel/Negotiate, SQL-backed Identity, cookies, discovery/JWKS, OIDC PKCE, and refresh were exercised. The test workstation has no W3SVC/WAS, `appcmd.exe`, or ANCM v2; no IIS features, bundles, browsers, or certificates were installed or enabled. The deployable IIS browser verification is prepared, but its live result is pending the external Windows Server test site. Actual DAB REST/GraphQL compatibility remains ticket #10.
 
-## Pending browser-verifier investigation
+## Completed local issuer proof
 
-[Ticket #13](https://github.com/gcapnias/dab-iis-yarp/issues/13) tracks the separate-origin callback navigation/token-fetch/CORS limitation and the Development-only diagnostic prerequisite mismatch in the current browser verifier. Its [investigation report](../../archive/research/identity-issuer/browser-oidc-investigation.md) records the reproducible revision and evidence. The script does not yet provide a passing browser OIDC exchange proof; use its results only for checks explicitly completed. Windows Server/IIS execution remains #12.
+[The browser-verifier investigation](https://github.com/gcapnias/dab-iis-yarp/issues/13#issuecomment-5954469504) is closed. Commits `48d6f07`, `e8f595a` and `607055f` are integrated on `develop` by `6d7fc6c`. The [investigation report](../../archive/research/identity-issuer/browser-oidc-investigation.md) and [browser evidence](../../archive/research/identity-issuer/browser-proof-2026-10-02.md) record the successful real callback, browser code/PKCE exchange, signed ID/access JWT validation, refresh rotation, replay rejection and application-log safeguard. The merged Release suite passed 34/34 with zero build warnings/errors. This completes the local issuer proof; actual DAB JWT/cookie compatibility and permissions remain the interoperability gate, and Windows Server/IIS plus independent access-log evaluation remain the final server gate.
