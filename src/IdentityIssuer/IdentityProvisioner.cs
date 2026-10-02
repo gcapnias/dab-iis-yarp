@@ -15,6 +15,7 @@ public sealed class IdentityProvisioner(
         string profileId,
         string? displayName,
         IReadOnlyCollection<string> roleNames,
+        string? clearanceLevel = null,
         CancellationToken cancellationToken = default)
     {
         if (!OperatingSystem.IsWindows())
@@ -26,6 +27,12 @@ public sealed class IdentityProvisioner(
         if (string.IsNullOrWhiteSpace(profileId) || profileId.Length > 64)
         {
             throw new ArgumentException("ProfileId must contain between 1 and 64 characters.", nameof(profileId));
+        }
+
+        var mappedClearance = string.IsNullOrWhiteSpace(clearanceLevel) ? null : clearanceLevel.Trim();
+        if (mappedClearance is { Length: > 32 } || mappedClearance?.Any(char.IsControl) == true)
+        {
+            throw new ArgumentException("ClearanceLevel must contain at most 32 printable characters.", nameof(clearanceLevel));
         }
 
         var normalizedRoles = roleNames.Select(role => role.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -50,9 +57,14 @@ public sealed class IdentityProvisioner(
             UserName = windowsSid,
             WindowsSid = windowsSid,
             ProfileId = profileId,
+            LockoutEnabled = true,
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim()
         };
         EnsureSuccess(await users.CreateAsync(user));
+        if (mappedClearance is not null)
+        {
+            EnsureSuccess(await users.AddClaimAsync(user, new System.Security.Claims.Claim("ClearanceLevel", mappedClearance)));
+        }
 
         foreach (var roleName in normalizedRoles)
         {

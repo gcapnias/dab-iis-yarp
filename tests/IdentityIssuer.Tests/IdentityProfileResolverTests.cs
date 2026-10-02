@@ -74,6 +74,26 @@ public sealed class IdentityProfileResolverTests
         Assert.Equal(IdentityLookupFailure.NoRoles, result.Failure);
     }
 
+    [Fact]
+    public async Task ResolveAsync_rejects_a_disabled_identity_profile()
+    {
+        var profile = new IdentityProfile(Sid, "user-7", "profile-7", "Example User", ["reader"]) { IsEnabled = false };
+
+        var result = await new IdentityProfileResolver(new FakeDirectory(profile)).ResolveAsync(Principal(Sid), CancellationToken.None);
+
+        Assert.Equal(IdentityLookupFailure.AccountDisabled, result.Failure);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_rejects_a_locked_identity_profile()
+    {
+        var profile = new IdentityProfile(Sid, "user-7", "profile-7", "Example User", ["reader"]) { IsLockedOut = true };
+
+        var result = await new IdentityProfileResolver(new FakeDirectory(profile)).ResolveAsync(Principal(Sid), CancellationToken.None);
+
+        Assert.Equal(IdentityLookupFailure.AccountLocked, result.Failure);
+    }
+
     private static ClaimsPrincipal Principal(string sid) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.PrimarySid, sid)], "test"));
 

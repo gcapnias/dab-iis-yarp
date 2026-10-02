@@ -38,8 +38,10 @@ public static class IdentityProvisioningCommand
         var displayName = Console.ReadLine();
         Console.Write("Roles (comma separated): ");
         var roles = (Console.ReadLine() ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        Console.Write("ClearanceLevel claim (optional): ");
+        var clearanceLevel = Console.ReadLine();
 
-        await provisioner.ProvisionAsync(sid, profileId, displayName, roles);
+        await provisioner.ProvisionAsync(sid, profileId, displayName, roles, clearanceLevel);
         Console.WriteLine("Identity profile provisioned.");
     }
 }

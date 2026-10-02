@@ -7,20 +7,25 @@ namespace IdentityIssuer;
 
 public static class IssuerIdentityDatabase
 {
-    public static void ValidateNorthwindConnectionString(string connectionString)
+    public static void ValidateIssuerConnectionString(string connectionString)
     {
-        var parsed = new SqlConnectionStringBuilder(connectionString);
-        if (!string.Equals(parsed.InitialCatalog, "northwind", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            throw new InvalidOperationException("ConnectionStrings:IssuerIdentity must target the Northwind database.");
+            throw new InvalidOperationException("ConnectionStrings:IssuerIdentity must contain a SQL Server connection string.");
+        }
+
+        var parsed = new SqlConnectionStringBuilder(connectionString);
+        if (string.IsNullOrWhiteSpace(parsed.InitialCatalog))
+        {
+            throw new InvalidOperationException("ConnectionStrings:IssuerIdentity must specify a database catalog.");
         }
     }
 
     public static IServiceCollection AddIssuerIdentityDatabase(this IServiceCollection services, string connectionString)
     {
-        ValidateNorthwindConnectionString(connectionString);
+        ValidateIssuerConnectionString(connectionString);
         services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString,
-            sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", ApplicationDbContext.IdentitySchema)));
+            sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", ApplicationDbContext.IdentitySchema)).UseOpenIddict());
         return services;
     }
 

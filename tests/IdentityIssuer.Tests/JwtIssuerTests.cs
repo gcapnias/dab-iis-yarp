@@ -14,7 +14,10 @@ public sealed class JwtIssuerTests
         var settings = new IssuerSettings("https://issuer.example.test", "api://catalog", "test-key", TimeSpan.FromMinutes(10), "dab_access_token", null);
         var issuer = new JwtIssuer(key, settings);
         var now = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
-        var profile = new IdentityProfile("S-1-5-21-10-20-30-1001", "user-7", "profile-7", "Example User", ["reader", "editor", "reader"]);
+        var profile = new IdentityProfile("S-1-5-21-10-20-30-1001", "user-7", "profile-7", "Example User", ["reader", "editor", "reader"])
+        {
+            Claims = new Dictionary<string, string> { ["ClearanceLevel"] = "Level3" }
+        };
 
         var token = issuer.CreateToken(profile, now);
         var parts = token.Split('.');
@@ -32,6 +35,7 @@ public sealed class JwtIssuerTests
         Assert.Equal("Example User", claims.RootElement.GetProperty("name").GetString());
         Assert.Equal(now.AddMinutes(10).ToUnixTimeSeconds(), claims.RootElement.GetProperty("exp").GetInt64());
         Assert.Equal(new[] { "reader", "editor" }, claims.RootElement.GetProperty("roles").EnumerateArray().Select(role => role.GetString() ?? string.Empty).ToArray());
+        Assert.Equal("Level3", claims.RootElement.GetProperty("ClearanceLevel").GetString());
 
         var signature = Decode(parts[2]);
         var signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");

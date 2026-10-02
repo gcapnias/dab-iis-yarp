@@ -4,6 +4,7 @@ using IdentityIssuer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace IdentityIssuer.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002042057_AddOpenIddictAndRefreshTokens")]
+    partial class AddOpenIddictAndRefreshTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -111,30 +114,6 @@ namespace IdentityIssuer.Migrations
                         .IsUnique();
 
                     b.ToTable("AspNetUsers", "IdentityIssuer");
-                });
-
-            modelBuilder.Entity("IdentityIssuer.OidcRefreshTokenUse", b =>
-                {
-                    b.Property<string>("AuthorizationId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("TokenId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTimeOffset>("ConsumedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset?>("FamilyRevokedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.HasKey("AuthorizationId", "TokenId");
-
-                    b.ToTable("OidcRefreshTokenUses", "IdentityIssuer");
                 });
 
             modelBuilder.Entity("IdentityIssuer.RefreshTokenRecord", b =>

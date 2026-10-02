@@ -7,13 +7,19 @@ namespace IdentityIssuer.Tests;
 public sealed class ApplicationDbContextTests
 {
     [Fact]
-    public void Northwind_connection_validator_rejects_other_catalogs_without_connecting()
+    public void Connection_validator_accepts_any_explicit_catalog_without_connecting()
+    {
+        IssuerIdentityDatabase.ValidateIssuerConnectionString(
+            "Server=(local);Database=issuer-test;Integrated Security=true;TrustServerCertificate=true");
+    }
+
+    [Fact]
+    public void Connection_validator_requires_an_explicit_catalog()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            IssuerIdentityDatabase.ValidateNorthwindConnectionString(
-                "Server=(local);Database=master;Integrated Security=true;TrustServerCertificate=true"));
+            IssuerIdentityDatabase.ValidateIssuerConnectionString("Server=(local);Integrated Security=true"));
 
-        Assert.Contains("Northwind", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("catalog", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

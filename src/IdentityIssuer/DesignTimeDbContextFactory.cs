@@ -8,8 +8,8 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
     public ApplicationDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__IssuerIdentity")
-            ?? throw new InvalidOperationException("Set ConnectionStrings__IssuerIdentity to a Northwind development connection string before using EF tooling.");
-        IssuerIdentityDatabase.ValidateNorthwindConnectionString(connectionString);
+            ?? throw new InvalidOperationException("Set ConnectionStrings__IssuerIdentity to the intended SQL Server database before using EF tooling.");
+        IssuerIdentityDatabase.ValidateIssuerConnectionString(connectionString);
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlServer(connectionString, sql =>

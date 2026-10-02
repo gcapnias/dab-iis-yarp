@@ -1,117 +1,93 @@
-# Run the Windows Authentication JWT issuer prototype
+# Run the Windows Authentication OIDC/JWT issuer
 
-This runbook creates the separate ASP.NET Core .NET 10 identity issuer used by the DAB architecture proof. The issuer authenticates a Windows request, maps the caller's SID to an explicitly provisioned ASP.NET Core Identity user, reads that user's profile and roles from SQL Server, and issues a short-lived RS256 JWT in an HttpOnly cookie. It does not host DAB, accept a client-selected identity or role, or establish DAB compatibility.
+This standalone ASP.NET Core 10 app authenticates a Windows request, maps the request principal's SID to an operator-provisioned ASP.NET Core Identity account, loads persisted profile claims and roles, and acts as a real OpenID Connect Provider. It also has a first-party session-cookie bridge for the separate DAB embedding work. The issuer does not host DAB. The actual cookie-to-DAB bearer bridge and DAB REST/GraphQL authorization proof belong to ticket #10.
 
-Research notes: [ASP.NET Identity and SQL Server design](../../archive/research/aspnet-identity-net10-issuer.md), [Windows, JWT discovery, and browser cookie contracts](../../archive/research/aspnet-windows-jwt-cookie-contracts.md), and [DAB metadata discovery details](../../archive/research/identity-issuer/discovery-implementation-details.md). The generated schema-only migration is [IdentityIssuerInitialCreate.sql](../../archive/research/identity-issuer/IdentityIssuerInitialCreate.sql); sanitized local run results are [here](../../archive/research/identity-issuer/live-proof-2026-10-01.md).
+Primary-source research: [.NET 10 Identity and SQL Server](../../archive/research/aspnet-identity-net10-issuer.md), [Windows request-principal SID binding](../../archive/research/identity-issuer/windows-principal-identity-binding.md), [OpenIddict discovery and OIDC client behavior](../../archive/research/identity-issuer/discovery-implementation-details.md), and the [user-supplied Windows Authentication artifact](../../archive/research/windows-authentication-in-net-identity.md). The complete current schema script is [here](../../archive/research/identity-issuer/IdentityIssuer-current-idempotent.sql); live Kestrel/SQL evidence is [here](../../archive/research/identity-issuer/live-proof-2026-10-02.md).
 
-## Contract
+## Local configuration and startup
 
-| Token value | Source | Purpose |
-| --- | --- | --- |
-| `iss` | `Issuer:Url` | Must match DAB's configured issuer exactly, including any trailing slash. |
-| `aud` | `Issuer:Audience` | Resource identifier configured as DAB's audience. |
-| `sub` | ASP.NET Identity user `Id` | Stable subject for this issuer. |
-| `profile_id` | Persisted `ApplicationUser.ProfileId` | Opaque profile reference; it grants no access on its own. |
-| `name` | Persisted optional `ApplicationUser.DisplayName` | Display-only profile claim. |
-| `roles` | Persisted Identity user-to-role assignments | Role names emitted as an array; DAB requires this exact claim type. |
-| `iat`, `nbf`, `exp` | Issuer clock and configured lifetime | Lifetime is 1–60 minutes; the default is 10. |
+The tracked [appsettings.json](../../src/IdentityIssuer/appsettings.json) contains safe local defaults for issuer URL/audience, cookies, Negotiate, key paths, lifetime, and the local public OIDC client. It contains no database credential or signing material. Supply `ConnectionStrings:IssuerIdentity` from the authorized local environment variable, .NET user secrets, or the primary checkout's ignored `.env` file. The startup script reads that file into process memory without printing it.
 
-Tokens use `RS256` and `typ=at+jwt`. The issuer publishes the public RSA key at `/.well-known/jwks.json` and a minimal DAB-oriented metadata document containing `issuer` and `jwks_uri` at `/.well-known/openid-configuration`. This is not a complete OpenID Connect Discovery document or an OAuth authorization server: it has no authorization-code or token endpoint. The path follows DAB's discovery lookup; exact compatibility with DAB and its metadata requirements remains for ticket #10. The private key stays in a restricted local or managed secret file.
-
-Discovery and JWKS are the only anonymous GET routes so DAB's server-side key retriever can load them without a browser's Windows credentials. All other endpoints require an authenticated Windows principal; `/csrf`, `/session`, and `/session/logout` require Windows authentication, and the two POSTs also require antiforgery validation. When deploying behind IIS, allow anonymous requests only to the two metadata paths while keeping Windows Authentication required for the user/session paths.
-
-The browser cookie is named `dab_access_token`, `HttpOnly`, `Secure`, `SameSite=Lax`, host-only by default, scoped to `/`, and expires with the JWT. `Issuer:CookieDomain` is optional and should be set only after choosing a shared DNS trust boundary for the issuer and embedded application. The issuer provides a request token at `/csrf`; callers must send it in `X-CSRF-TOKEN` for both `POST /session` and `POST /session/logout`. The embedded application's cookie-to-bearer bridge must validate CSRF again before forwarding the JWT to DAB.
-
-## Requirements and preparation
-
-- .NET 10 SDK. This worktree used SDK 10.0.401 and runtime 10.0.12.
-- A Windows host configured for Windows Authentication. For IIS, enable its Windows Authentication role service and allow anonymous access only to the discovery/JWKS paths; require Windows Authentication on `/csrf`, `/session`, and `/session/logout`. For local Kestrel, use the Negotiate handler on Windows and an approved Windows test identity.
-- An authorized development SQL Server database named `northwind` and a connection string for it. The DAB proof's existing Northwind use is read-only. This issuer adds tables only under a separate `IdentityIssuer` schema, but applying that schema still requires explicit development DDL authorization and an approved backup/target.
-- An RSA private key of at least 2048 bits, stored outside the repository and readable only by the issuer process identity.
-- One operator-approved Windows SID, profile ID, display name, and initial role set to provision for testing.
-
-The checked-in migration has been reviewed and applied to the user-authorized disposable Northwind database for this proof. The resulting tables are isolated under `IdentityIssuer`; the evidence note records the verified table list. For any other database, obtain explicit authorization for schema creation and review the target before applying. Never use a production database.
-
-The repository pins EF tooling to `10.0.12` in `.config/dotnet-tools.json`. Run `dotnet tool restore` before using `dotnet ef` on a new checkout.
-
-## Create and configure
-
-The runnable project is [IdentityIssuer.csproj](../../src/IdentityIssuer/IdentityIssuer.csproj). It targets `net10.0` and pins Identity EF Core, EF Core SQL Server, EF Core Design, and Negotiate to `10.0.12`. The separate DAB host remains on `Microsoft.DataApiBuilder.Core` `2.0.12` and is not referenced by this project.
-
-Copy the safe example settings and provide secrets using the local .NET User Secrets store or the approved secret provider for the host:
+From the assigned worktree, run:
 
 ```powershell
-Copy-Item src/IdentityIssuer/appsettings.example.json src/IdentityIssuer/appsettings.Development.json
-dotnet user-secrets set "ConnectionStrings:IssuerIdentity" "<approved Northwind development connection string>" --project src/IdentityIssuer/IdentityIssuer.csproj
+.\scripts\run-identity-issuer.ps1
 ```
 
-Keep the actual connection string out of tracked files, command output, issue comments, and evidence. The app rejects a connection string whose initial catalog is not `northwind`. Set `Issuer:Url`, `Issuer:Audience`, `Issuer:KeyId`, `Issuer:SigningKeyPath`, `Issuer:LifetimeMinutes`, and `WindowsAuthentication:Mode` in local settings. Use an HTTPS issuer URL in non-development environments. `Mode` is `IIS` for IIS integration or `Negotiate` for Kestrel.
+The script resolves the primary checkout even when launched from a linked worktree. It verifies both key paths are gitignored before it creates RSA-3072 signing and encryption keys; the keys are generated only when absent under the ignored primary path `.scratch/identity-issuer/keys/` and survive app restarts. The script does not install, trust, or provision an HTTPS certificate. A valid localhost development certificate must already exist. The PowerShell test harness bypasses certificate validation only for an HTTPS URL whose host is exactly `localhost`; it does not validate the certificate chain or subject name. This loopback-only test bypass is not production TLS validation.
 
-Generate a private PKCS#8 key on the trusted host and store it outside the repository. For example, run this in a protected PowerShell session after choosing a restricted path:
+The project targets `net10.0`. ASP.NET Core Identity EF Core, EF Core SQL Server/Design, and Negotiate are pinned to `10.0.12`; OpenIddict ASP.NET Core and EF Core are pinned to `7.7.1`. DAB Core remains on its separate `2.0.12` baseline and is not referenced here. The issuer uses the configured SQL Server catalog; `Northwind` is only the authorized disposable proof target, not a runtime requirement.
 
-```powershell
-$issuerRsa = [System.Security.Cryptography.RSA]::Create(3072)
-[System.IO.File]::WriteAllText('C:\secure\issuer-rsa-private.pem', $issuerRsa.ExportPkcs8PrivateKeyPem())
-$issuerRsa.Dispose()
-```
+## Database and operator provisioning
 
-Set `Issuer:KeyId` to a non-secret identifier for that key. Never commit or copy the private key into an artifact. This prototype publishes one active signing key at a time; rotate after existing tokens expire and verify the DAB key refresh behavior in ticket #10.
+`ApplicationDbContext` maps standard Identity and OpenIddict persistence plus `RefreshTokens` into the dedicated `IdentityIssuer` schema. The user table has unique Windows SID and profile ID indexes, an explicit `IsEnabled` switch, and normal Identity lockout/security-stamp fields. Migrations are never applied at startup.
 
-## Review and apply the Identity schema
-
-The `ApplicationDbContext` derives from `IdentityDbContext` and maps ASP.NET Identity tables plus two custom profile fields into schema `IdentityIssuer`. It adds unique indexes for `WindowsSid` and `ProfileId`. The idempotent migration also places EF's migration-history table in that schema. The applied migration was verified against the disposable database and did not create or alter Northwind sample tables.
-
-To generate a migration after an approved model change, set `ConnectionStrings__IssuerIdentity` in the process environment to the approved Northwind development connection string, then run:
+Restore the pinned tool once, inspect the target, generate and review an idempotent script, then apply only to an explicitly authorized development database:
 
 ```powershell
-dotnet ef migrations add <MigrationName> --project src/IdentityIssuer/IdentityIssuer.csproj --output-dir Migrations
+dotnet tool restore
+dotnet ef migrations list --project src/IdentityIssuer/IdentityIssuer.csproj
 dotnet ef migrations script --idempotent --project src/IdentityIssuer/IdentityIssuer.csproj --output .scratch/identity-issuer-migration.sql
+dotnet ef database update --project src/IdentityIssuer/IdentityIssuer.csproj
 ```
 
-Review the SQL script and its target before applying it. The generated script for the current model is preserved under `archive/research/identity-issuer/`. The authorized disposable Northwind target already has migration `20261001152500_IdentityIssuerInitialCreate` applied. Startup does not automatically migrate the database.
+All five migrations are applied to the authorized disposable Northwind database for the recorded proof. The checked-in idempotent script creates objects only in `IdentityIssuer`; it has no `DROP` or sample-data DML. It includes ASP.NET Identity, OpenIddict Applications/Authorizations/Scopes/Tokens, refresh-token storage, replay markers with token expiry, and the schema-local EF migration history. Verify the destination and review the generated SQL before applying this to any other database.
 
-## Provision a test identity
-
-After the approved migration has been applied to the authorized development database, run the local operator command:
+Provision identities only through a trusted local operator command:
 
 ```powershell
 dotnet run --project src/IdentityIssuer/IdentityIssuer.csproj -- --provision-identity
 ```
 
-The console prompts for the Windows SID, opaque `ProfileId`, optional display name, and roles. It creates an ASP.NET Identity user with no password sign-in, creates only the explicitly entered roles that do not already exist, and attaches the user to those roles in a transaction. It has no web registration or role-selection endpoint. Do not derive roles from client input, request headers, or unreviewed Windows groups. Provision only test values approved for the development proof.
+The command prompts for a Windows SID, opaque profile ID, optional display name, explicitly granted role names, and an optional `ClearanceLevel` claim. It uses `UserManager` and `RoleManager` in a transaction. It creates no password or web registration path. The API accepts no client-selected identity or role. The current claim contract copies only a single non-empty `ClearanceLevel` value from persisted user/role claims; conflicting values fail closed. Other claims such as email and security stamps are not emitted as authorization claims. Never put a SID or real profile values in command history, logs, test fixtures, or evidence.
 
-For the recorded local proof, one synthetic profile and one test role are already mapped to the current Windows account in the disposable database. Do not run the command again for that same account unless you have first checked the existing mapping; duplicate SID mappings are rejected.
-
-## Start and verify
-
-Start the app under its configured Windows Authentication host. On local Kestrel, use the HTTPS development endpoint:
+Register the configured native OIDC client after applying migrations:
 
 ```powershell
-dotnet run --project src/IdentityIssuer/IdentityIssuer.csproj --urls https://localhost:5001
+dotnet run --project src/IdentityIssuer/IdentityIssuer.csproj -- --provision-oidc-client
 ```
 
-Check the metadata and JWKS over HTTPS. Confirm the metadata `issuer` exactly matches the `iss` claim produced in a token; confirm that the JWKS has the configured `kid`, RSA `n` and `e`, and no private parameters. A browser client first GETs `/csrf`, retains the antiforgery cookie and request token, then POSTs `/session` with `X-CSRF-TOKEN`. A successful response sets the JWT cookie without returning the token in the response body. Logout uses the same antiforgery contract at `POST /session/logout` and clears the cookie.
+This is an idempotent, local operator command for the exact configured HTTPS redirect URI. The client is public, uses authorization code with PKCE, and has only the configured issuer scopes.
 
-Verify the token's signature with the published JWK and inspect only sanitized claims: `iss`, `aud`, `sub`, `profile_id`, optional `name`, `roles`, `iat`, `nbf`, and `exp`. Test an unauthenticated request, unknown SID, SID mismatch, user without roles, invalid CSRF token, and logout. Never put a raw JWT, SID, display name, email, or database credential in tracked evidence or issue comments.
+## OIDC and session contracts
 
-The fixture suite can be run without database access:
+OpenIddict serves a genuine OpenID Connect Discovery document at `/.well-known/openid-configuration` and the corresponding public RSA JWKS at `/.well-known/jwks`. Discovery describes the implemented authorization and token endpoints, authorization-code and refresh grants, scopes, response types, signing algorithm, and PKCE methods. Anonymous GET access to discovery/JWKS is required so server-side relying parties can bootstrap signing-key retrieval without a browser credential. The authorization endpoint authenticates the current Windows request before resolving its SID. The registered native client redeems the code with its PKCE verifier at the token endpoint. The token endpoint accepts protocol grants only; invalid code, verifier, client, refresh token, or replay is rejected. Refresh-token use markers are persisted by token and authorization family; replay revokes the family and causes remaining descendants to fail.
+
+OIDC ID tokens identify the Identity user as `sub`; access tokens carry `profile_id`, persisted `roles`, and the allowlisted `ClearanceLevel` claim. Tokens are signed with RS256 and are not access-token encrypted, so resource servers can validate them from the public JWKS. Identity lockout, `IsEnabled`, and security-stamp changes are checked before new Windows sessions and before OIDC refresh grants. Already-issued access JWTs are stateless and remain usable by a downstream validator until their short expiry; logout cannot revoke a JWT already copied by another service. Keep the access lifetime short and enforce revocation/session policy in the consuming application where needed.
+
+For cookie-based first-party embedding, the protected endpoints are:
+
+| Endpoint | Purpose | Access |
+| --- | --- | --- |
+| `GET /csrf` | Issue the antiforgery cookie and request token | Windows Authentication |
+| `POST /session` | Resolve current SID and set the short-lived `dab_access_token` cookie plus a separate refresh cookie | Windows Authentication + antiforgery |
+| `POST /session/refresh` | Rotate the persisted cookie refresh-token family and renew the access cookie | Windows Authentication + antiforgery |
+| `POST /session/logout` | Revoke the refresh-token family and expire both cookies | Windows Authentication + antiforgery |
+
+The access cookie is `HttpOnly`, `Secure`, `SameSite=Lax`, host-only by default, and expires with its JWT. The refresh cookie is a distinct opaque random secret, `HttpOnly`, `Secure`, `SameSite=Strict`, and scoped to the issuer path. Only a SHA-256 hash of a refresh token is stored. Rotation marks each token consumed; replay revokes the whole family. OIDC replay markers remain until the consumed token's original expiration; after it expires, OpenIddict rejects replay without the marker. For an orphan marker whose token entry was already pruned, the migration uses a conservative 30-day expiry from consumption, matching the configured maximum refresh-token lifetime. Disabled, locked, mismatched, expired, or security-stamp-changed accounts cannot refresh. Daily cleanup removes expired custom refresh rows and OIDC replay markers, and prunes old invalid OpenIddict tokens/authorizations after 30 days. Session-cookie logout clears cookies and revokes refresh, while access JWTs already issued remain valid until expiry.
+
+The proposed DAB bridge is a same-origin or explicitly same-site application endpoint: the browser sends the HttpOnly cookie; the app validates antiforgery on state-changing calls, reads the cookie server-side, and forwards its access JWT as a bearer token to embedded DAB. The browser never reads the JWT or chooses roles. Ticket #10 must validate actual cookie scope, host behavior, forwarding, and DAB REST/GraphQL permissions.
+
+## Key rollover
+
+The active private key is at `Issuer:SigningKeyPath`; its configured `KeyId` is included in signed tokens. To rotate, generate a new active key and configure the outgoing active private key temporarily under `Issuer:PreviousSigningKeys` with its original key ID and restricted `PrivateKeyPath`. The issuer publishes the active and overlap public keys together while signing with the new active key. Verify that a token from each key validates through JWKS. Keep the previous private key accessible only for the overlap deployment, then remove it after the maximum access-token lifetime and relying-party cache window have elapsed. The sample automated suite proves overlapping JWKS keys and validation of a prior-key token. Never commit private key material; local development keys remain in ignored `.scratch`.
+
+## Run verification
+
+Run automated tests and the real local HTTP integration harness:
 
 ```powershell
 dotnet test tests/IdentityIssuer.Tests/IdentityIssuer.Tests.csproj
+.
+scripts\test-identity-issuer.ps1
 ```
 
-The HTTP fixture tests use a test-only authentication handler and directory; EF user/role fixture lookup uses an isolated in-memory provider. A separate live Kestrel proof was run on this machine and is recorded in the linked evidence. The fixture suite alone does not prove Windows Authentication or SQL connectivity. The SQL Server model test checks mapping and unique constraints without connecting to the database.
+The harness uses PowerShell 7 `UseDefaultCredentials` for Windows Negotiate and skips certificate validation only for `https://localhost` (the development certificate chain and subject are not validated by that client). It prints HTTP statuses, identity runtime type, and SID-presence booleans. It never prints a SID, account/profile value, code, cookie, JWT, refresh token, or connection string. It checks anonymous discovery/JWKS, anonymous denial, antiforgery, secure cookie flags, JWT signature/issuer/audience/lifetime/claims, refresh rotation/replay/logout, and a full Windows-authenticated authorization-code/PKCE/token/refresh flow.
 
-## Proposed embedded DAB integration
+The accompanying [HTTP request file](../../requests/windows-jwt-issuer.http) is suitable for anonymous metadata and negative unauthenticated requests. VS Code REST Client does not supply default Windows credentials; use the PowerShell harness for successful Windows-authenticated requests. The development-only `/diagnostics/windows-auth` endpoint reports the request identity type and whether SID claims/request token SID exist, never their values.
 
-The browser sends the issuer cookie to an application-owned endpoint on the embedded DAB host. Ticket #10 must validate the cookie's issuer contract, enforce a CSRF token on state-changing requests, extract the JWT server-side, and forward it to DAB as `Authorization: Bearer <token>`. The browser must not read the HttpOnly JWT or choose a DAB role it does not hold. Same-origin or explicitly configured same-site cookie scope is required; cross-site `SameSite=None` behavior requires `Secure` and a separate review. REST/GraphQL compatibility, DAB permission enforcement, cookie scope across the actual hosts, and CORS are unproven here.
+The tests also reject wrong issuers, audiences, expiry, unknown key IDs, tampered signatures, unmapped SIDs, disabled/locked accounts, roleless users, and conflicting claims. Fixture tests use isolated in-memory data and are separate from the live SQL/Windows proof.
 
-## Troubleshooting and limits
+## Evidence and limits
 
-- **401 from `/csrf` or `/session`:** these endpoints require Windows Authentication. Verify the client can negotiate with the host. Keep anonymous access limited to discovery and JWKS so DAB can fetch signing keys without an interactive Windows credential.
-- **403 from `/session`:** the authenticated SID has no mapped Identity user, does not match the stored `WindowsSid`, or has no persisted role assignment.
-- **400 from `/session` or logout:** fetch a current `/csrf` request token and send it in `X-CSRF-TOKEN` along with its antiforgery cookie.
-- **JWT rejected by DAB:** compare configured issuer, token `iss`, audience, expiry, signature, published `kid`/JWKS, and exact `roles` claim spelling. DAB validation remains a ticket #10 proof.
-- **SQL error at issuance:** verify the approved connection, that the migration was reviewed/applied, and that the issuer process identity may read/write the `IdentityIssuer` schema as needed. Do not diagnose from a partial import or create tables without approval.
-
-The live proof is limited to local Kestrel/Negotiate and a disposable database. It does not establish IIS hosting, production TLS trust, browser-specific SameSite behavior, multi-key signing rollover, token revocation, a full OAuth/OIDC authorization-code flow, or embedded-DAB REST/GraphQL validation. Ticket #10 owns DAB's cookie bridge and API permission proof.
+The current live record is [live-proof-2026-10-02.md](../../archive/research/identity-issuer/live-proof-2026-10-02.md), with the requirement coverage matrix in [implementation-report.md](../../archive/research/identity-issuer/implementation-report.md). Real Kestrel/Negotiate, SQL-backed Identity, cookies, discovery/JWKS, OIDC PKCE, and refresh were exercised. IIS/browser deployment and actual DAB REST/GraphQL compatibility remain unverified and are outside this issuer proof.
