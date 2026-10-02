@@ -132,7 +132,8 @@ try {
     Assert-True ($deleted.Status -in @(200, 204)) 'configured delete operation removes the fixture row'
     $afterDelete = Get-Response 'GET' '/api/Widget/id/3'
     $deleteReadRows = if ($afterDelete.Status -eq 200) { ($afterDelete.Body | ConvertFrom-Json).value } else { @() }
-    Assert-True ($afterDelete.Status -eq 404 -or $deleteReadRows.Count -eq 0) "DELETE removes the fixture row from subsequent reads (status $($afterDelete.Status), body $($afterDelete.Body))"
+    $deleteReadIsEmpty = $afterDelete.Status -eq 404 -or ($afterDelete.Status -eq 200 -and $deleteReadRows.Count -eq 0)
+    Assert-True $deleteReadIsEmpty "DELETE removes the fixture row from subsequent reads (status $($afterDelete.Status), body $($afterDelete.Body))"
     $denied = Get-Response 'POST' '/api/RetiredWidget' 'anonymous' '{"name":"denied"}'
     Assert-True ($denied.Status -in @(401, 403)) "per-entity REST permissions reject unconfigured create (status $($denied.Status), body $($denied.Body))"
     $gql = Assert-GraphQL '/graphql' '{ widgets(first: 2) { items { id name quantity } } }' 'anonymous' 'configured GraphQL query'
@@ -145,7 +146,8 @@ try {
     Assert-True ($deleteWidget.data.deleteWidget.id -eq 4) 'GraphQL delete mutation returns the deleted fixture key'
     $afterGraphQLDelete = Get-Response 'GET' '/api/Widget/id/4'
     $graphQLDeleteReadRows = if ($afterGraphQLDelete.Status -eq 200) { ($afterGraphQLDelete.Body | ConvertFrom-Json).value } else { @() }
-    Assert-True ($afterGraphQLDelete.Status -eq 404 -or $graphQLDeleteReadRows.Count -eq 0) "GraphQL delete mutation removes the fixture row (status $($afterGraphQLDelete.Status), body $($afterGraphQLDelete.Body))"
+    $graphQLDeleteReadIsEmpty = $afterGraphQLDelete.Status -eq 404 -or ($afterGraphQLDelete.Status -eq 200 -and $graphQLDeleteReadRows.Count -eq 0)
+    Assert-True $graphQLDeleteReadIsEmpty "GraphQL delete mutation removes the fixture row (status $($afterGraphQLDelete.Status), body $($afterGraphQLDelete.Body))"
     $retiredMutation = Get-Response 'POST' '/graphql' 'anonymous' ('{"query":"mutation { createRetiredWidget(item: { name: \"denied\" }) { id } }"}')
     $retiredMutationErrors = (($retiredMutation.Body | ConvertFrom-Json).errors | ForEach-Object { $_.message }) -join ' '
     Assert-True ($retiredMutationErrors -match 'createRetiredWidget' -and $retiredMutationErrors -match 'does not exist') 'GraphQL schema rejects the specific permission-denied create field'
