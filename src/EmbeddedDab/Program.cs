@@ -115,7 +115,7 @@ if (loadedConfig.IsGraphQLEnabled)
 app.MapMethods("/{**dabRoute}", ["GET", "POST", "PUT", "PATCH", "DELETE"], async context =>
 {
     var restService = context.RequestServices.GetRequiredService<RestService>();
-    if (!restService.TryGetRestRouteFromConfig(out _))
+    if (!restService.TryGetRestRouteFromConfig(out _) || !IsUnderConfiguredRestPath(context.Request.Path, loadedConfig.RestPath))
     {
         context.Response.StatusCode = StatusCodes.Status404NotFound;
         return;
@@ -159,6 +159,14 @@ app.MapMethods("/{**dabRoute}", ["GET", "POST", "PUT", "PATCH", "DELETE"], async
 });
 
 await app.RunAsync();
+
+static bool IsUnderConfiguredRestPath(PathString requestPath, string configuredRestPath)
+{
+    string normalizedRestPath = configuredRestPath.TrimEnd('/');
+    string requestPathValue = requestPath.Value ?? string.Empty;
+    return requestPathValue.Equals(normalizedRestPath, StringComparison.OrdinalIgnoreCase)
+        || requestPathValue.StartsWith(string.Concat(normalizedRestPath, "/"), StringComparison.OrdinalIgnoreCase);
+}
 
 static void LoadNorthwindConnectionFromEnvFile()
 {
@@ -240,7 +248,7 @@ static async Task ManageFixtureDatabaseAsync(string operation, string databaseNa
         }
         catch
         {
-            await using var removePartialFixture = new SqlCommand($"DROP DATABASE [{databaseName}]", connection);
+            await using var removePartialFixture = new SqlCommand($"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{databaseName}]", connection);
             await removePartialFixture.ExecuteNonQueryAsync();
             throw;
         }

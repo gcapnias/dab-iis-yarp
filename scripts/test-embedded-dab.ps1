@@ -121,21 +121,39 @@ try {
     Assert-True ($detail.Status -eq 200) 'configured key route reads the created row'
     $patched = Get-Response 'PATCH' '/api/Widget/id/3' 'anonymous' '{"quantity":2}'
     Assert-True ($patched.Status -in @(200, 204)) 'configured PATCH operation updates the fixture row'
+    $afterPatch = Get-Response 'GET' '/api/Widget/id/3'
+    Assert-True (($afterPatch.Body | ConvertFrom-Json).value[0].quantity -eq 2) 'PATCH persists the updated fixture quantity'
     $put = Get-Response 'PUT' '/api/Widget/id/3' 'anonymous' '{"name":"rest-upserted","quantity":4}'
     Assert-True ($put.Status -in @(200, 201, 204)) 'configured PUT operation upserts the fixture row'
+    $afterPut = Get-Response 'GET' '/api/Widget/id/3'
+    $putRow = ($afterPut.Body | ConvertFrom-Json).value[0]
+    Assert-True ($putRow.name -eq 'rest-upserted' -and $putRow.quantity -eq 4) 'PUT persists the upserted fixture values'
     $deleted = Get-Response 'DELETE' '/api/Widget/id/3'
     Assert-True ($deleted.Status -in @(200, 204)) 'configured delete operation removes the fixture row'
+    $afterDelete = Get-Response 'GET' '/api/Widget/id/3'
+    $deleteReadRows = if ($afterDelete.Status -eq 200) { ($afterDelete.Body | ConvertFrom-Json).value } else { @() }
+    Assert-True ($afterDelete.Status -eq 404 -or $deleteReadRows.Count -eq 0) "DELETE removes the fixture row from subsequent reads (status $($afterDelete.Status), body $($afterDelete.Body))"
     $denied = Get-Response 'POST' '/api/RetiredWidget' 'anonymous' '{"name":"denied"}'
     Assert-True ($denied.Status -in @(401, 403)) "per-entity REST permissions reject unconfigured create (status $($denied.Status), body $($denied.Body))"
     $gql = Assert-GraphQL '/graphql' '{ widgets(first: 2) { items { id name quantity } } }' 'anonymous' 'configured GraphQL query'
     Assert-True ($gql.data.widgets.items.Count -ge 2) 'GraphQL query reads fixture rows'
     $createWidget = Assert-GraphQL '/graphql' 'mutation { createWidget(item: { name: "graphql-created", quantity: 6 }) { id name quantity } }' 'anonymous' 'configured GraphQL mutation'
     Assert-True ($createWidget.data.createWidget.name -eq 'graphql-created') 'GraphQL mutation writes the disposable fixture'
+    $updateWidget = Assert-GraphQL '/graphql' 'mutation { updateWidget(id: 4, item: { quantity: 9 }) { id name quantity } }' 'anonymous' 'configured GraphQL update mutation'
+    Assert-True ($updateWidget.data.updateWidget.quantity -eq 9) 'GraphQL update mutation changes the fixture row'
+    $deleteWidget = Assert-GraphQL '/graphql' 'mutation { deleteWidget(id: 4) { id } }' 'anonymous' 'configured GraphQL delete mutation'
+    Assert-True ($deleteWidget.data.deleteWidget.id -eq 4) 'GraphQL delete mutation returns the deleted fixture key'
+    $afterGraphQLDelete = Get-Response 'GET' '/api/Widget/id/4'
+    $graphQLDeleteReadRows = if ($afterGraphQLDelete.Status -eq 200) { ($afterGraphQLDelete.Body | ConvertFrom-Json).value } else { @() }
+    Assert-True ($afterGraphQLDelete.Status -eq 404 -or $graphQLDeleteReadRows.Count -eq 0) "GraphQL delete mutation removes the fixture row (status $($afterGraphQLDelete.Status), body $($afterGraphQLDelete.Body))"
     $retiredMutation = Get-Response 'POST' '/graphql' 'anonymous' ('{"query":"mutation { createRetiredWidget(item: { name: \"denied\" }) { id } }"}')
-    Assert-True (($retiredMutation.Body | ConvertFrom-Json).errors.Count -gt 0) 'GraphQL schema omits a mutation denied by configured permissions'
+    $retiredMutationErrors = (($retiredMutation.Body | ConvertFrom-Json).errors | ForEach-Object { $_.message }) -join ' '
+    Assert-True ($retiredMutationErrors -match 'createRetiredWidget' -and $retiredMutationErrors -match 'does not exist') 'GraphQL schema rejects the specific permission-denied create field'
 
     $retired = Get-Response 'GET' '/api/RetiredWidget'
     Assert-True ($retired.Status -eq 200) 'initial configuration exposes RetiredWidget through REST'
+    $initialPathPrefixCollision = Get-Response 'GET' '/apiWidget'
+    Assert-True ($initialPathPrefixCollision.Status -eq 404) 'REST rejects paths that only share the configured path prefix'
     $oldLabel = Get-Response 'GET' '/api/Label'
     Assert-True ($oldLabel.Status -eq 404) 'initial configuration does not expose Label'
     Stop-ProofHost
@@ -148,6 +166,8 @@ try {
     Assert-True ($newWidgetPath.ProcessId -eq $script:expectedProcessId) 'expanded REST adapter is served by the restarted host process'
     $oldWidgetPath = Get-Response 'GET' '/api/Widget'
     Assert-True ($oldWidgetPath.Status -ne 200) 'previous REST base path is inactive after restart'
+    $expandedPathPrefixCollision = Get-Response 'GET' '/v2catalog/widgets'
+    Assert-True ($expandedPathPrefixCollision.Status -eq 404) 'expanded REST path rejects prefix collisions without a segment boundary'
     $newLabel = Get-Response 'GET' '/v2/Label'
     Assert-True ($newLabel.Status -eq 200) 'configuration-only entity addition exposes Label after restart'
     $removedRetired = Get-Response 'GET' '/v2/RetiredWidget'
@@ -155,7 +175,8 @@ try {
     $expandedQuery = Assert-GraphQL '/gql-v2' '{ labels { items { id name } } }' 'anonymous' 'expanded GraphQL schema query'
     Assert-True ($expandedQuery.data.labels.items[0].name -eq 'added-by-config') 'new GraphQL entity is queryable after restart'
     $retiredQuery = Get-Response 'POST' '/gql-v2' 'anonymous' ('{"query":"{ retiredWidgets { items { id } } }"}')
-    Assert-True (($retiredQuery.Body | ConvertFrom-Json).errors.Count -gt 0) 'removed entity is absent from the GraphQL schema after restart'
+    $retiredQueryErrors = (($retiredQuery.Body | ConvertFrom-Json).errors | ForEach-Object { $_.message }) -join ' '
+    Assert-True ($retiredQueryErrors -match 'retiredWidgets' -and $retiredQueryErrors -match 'does not exist') 'GraphQL schema reports the removed entity field as unknown after restart'
     $newHost = Get-Response 'GET' '/host' ''
     Assert-True (($newHost.Body | ConvertFrom-Json).processId -ne $processId) 'configuration changes were applied by restarting the same built binary'
 

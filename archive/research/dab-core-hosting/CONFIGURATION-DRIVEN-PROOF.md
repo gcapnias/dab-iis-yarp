@@ -4,7 +4,7 @@ Ticket: [Prove configuration-driven REST and GraphQL access through embedded DAB
 
 ## Result
 
-**Go for the scoped configuration-driven prototype on .NET 10 with `Microsoft.DataApiBuilder.Core` 2.0.12.** The application loads DAB configuration into the same-process Core engine and serves REST and GraphQL from its own ASP.NET Core process. The verifier compiled the binary once, ran the initial configuration, stopped the host, replaced only the configuration file, and restarted the same binary. All 32 checks passed against a random disposable SQL Server database, and the database was removed by the verifier.
+**Go for the scoped configuration-driven prototype on .NET 10 with `Microsoft.DataApiBuilder.Core` 2.0.12.** The application loads DAB configuration into the same-process Core engine and serves REST and GraphQL from its own ASP.NET Core process. The verifier compiled the binary once, ran the initial configuration, stopped the host, replaced only the configuration file, and restarted the same binary. All 46 checks passed against a random disposable SQL Server database, and the database was removed by the verifier.
 
 This extends the original narrow Products-read result documented in the [hosting research](README.md) and [runbook](../../../docs/runbooks/dab-core-web-application.md). The original Products evidence and source remain unchanged.
 
@@ -12,7 +12,7 @@ This extends the original narrow Products-read result documented in the [hosting
 
 The prototype is under [`src/EmbeddedDab/`](../../../src/EmbeddedDab/). It pins Core 2.0.12 and the same four supplemental dependencies as the original proof. The host registers the public runtime loader/provider, metadata/query/mutation factories, `RestService`, `GraphQLSchemaCreator`, and the dependencies observed by the first spike.
 
-The REST adapter uses the loaded `RestPath` and Core's entity-path parser, then dispatches configured routes to `RestService.ExecuteAsync` for read, insert, update/upsert, and delete operations. It executes the returned MVC result within the same ASP.NET Core request. The host composes `GraphQLSchemaCreator.InitializeSchemaAndResolvers` into Hot Chocolate's schema builder and maps the configured GraphQL path. Its request interceptor passes the current `HttpContext`, principal, and client-role header in the context form expected by the DAB GraphQL mutation engine.
+The REST adapter enforces a segment-aware match on the configured `RestPath`, then uses Core's entity-path parser and dispatches configured routes to `RestService.ExecuteAsync` for read, insert, update/upsert, and delete operations. It executes the returned MVC result within the same ASP.NET Core request. The host composes `GraphQLSchemaCreator.InitializeSchemaAndResolvers` into Hot Chocolate's schema builder and maps the configured GraphQL path. Its request interceptor passes the current `HttpContext`, principal, and client-role header in the context form expected by the DAB GraphQL mutation engine.
 
 The two sanitized, reproducible configurations are [`initial.json`](../../../src/EmbeddedDab/configurations/initial.json) and [`expanded.json`](../../../src/EmbeddedDab/configurations/expanded.json). The first exposes `Widget` and read-only `RetiredWidget`; the second changes the global REST path and the Widget entity path, adds `Label`, and removes `RetiredWidget`. The [verification script](../../../scripts/test-embedded-dab.ps1) creates all three tables and seed rows in an isolated, randomly named database, exercises the API, and drops the database.
 
@@ -24,14 +24,15 @@ Run from a checkout with .NET 10 and access to the SQL Server specified by the p
 ./scripts/test-embedded-dab.ps1
 ```
 
-The script compiled with **zero warnings and zero errors** and passed **32 checks**. The [captured transcript](evidence-ticket-9.txt) records the run. It verifies:
+The script compiled with **zero warnings and zero errors** and passed **46 checks**. The [captured transcript](evidence-ticket-9.txt) records the run. It verifies:
 
 - Host and REST responses share a process ID; GraphQL requests share that ID as well.
-- REST collection and primary-key reads return fixture rows. POST, PUT, PATCH, and DELETE operate on fixture data.
+- REST collection and primary-key reads return fixture rows. POST, PUT, PATCH, and DELETE operate on fixture data, with follow-up reads confirming updated values and removed rows.
 - DAB returns HTTP 403 when a role configured only for `read` attempts a REST create.
-- A GraphQL query and create mutation execute against fixture data. The read-only entity has no generated create mutation.
+- GraphQL query, create, update, and delete mutations execute against fixture data; follow-up reads confirm mutation effects. The read-only entity's create mutation fails schema validation because that field is absent.
 - The expanded configuration exposes the changed global REST path and nested Widget path, exposes the added Label entity, and no longer exposes RetiredWidget.
-- GraphQL moves to its configured path, exposes Label, and no longer has the RetiredWidget query field.
+- GraphQL moves to its configured path, exposes Label, and reports the removed RetiredWidget query field as unknown.
+- REST paths that merely share a configured prefix without a segment boundary are rejected.
 - The restarted host has a new process ID while the verifier uses the same compiled assembly.
 - Fixture cleanup completes.
 

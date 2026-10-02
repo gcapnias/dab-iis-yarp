@@ -10,8 +10,11 @@ PASS REST response comes from the disposable fixture
 PASS configured create operation accepts a disposable fixture write (status 201, body {"value":[{"id":3,"name":"rest-created","quantity":1}]})
 PASS configured key route reads the created row
 PASS configured PATCH operation updates the fixture row
+PASS PATCH persists the updated fixture quantity
 PASS configured PUT operation upserts the fixture row
+PASS PUT persists the upserted fixture values
 PASS configured delete operation removes the fixture row
+PASS DELETE removes the fixture row from subsequent reads (status 200, body {"value":[]})
 PASS per-entity REST permissions reject unconfigured create (status 403, body {"error":"DAB request rejected."})
 PASS configured GraphQL query HTTP 200
 PASS configured GraphQL query is served by the host process
@@ -21,18 +24,29 @@ PASS configured GraphQL mutation HTTP 200
 PASS configured GraphQL mutation is served by the host process
 PASS configured GraphQL mutation has no GraphQL errors (body {"data":{"createWidget":{"id":4,"name":"graphql-created","quantity":6}}})
 PASS GraphQL mutation writes the disposable fixture
-PASS GraphQL schema omits a mutation denied by configured permissions
+PASS configured GraphQL update mutation HTTP 200
+PASS configured GraphQL update mutation is served by the host process
+PASS configured GraphQL update mutation has no GraphQL errors (body {"data":{"updateWidget":{"id":4,"name":"graphql-created","quantity":9}}})
+PASS GraphQL update mutation changes the fixture row
+PASS configured GraphQL delete mutation HTTP 200
+PASS configured GraphQL delete mutation is served by the host process
+PASS configured GraphQL delete mutation has no GraphQL errors (body {"data":{"deleteWidget":{"id":4}}})
+PASS GraphQL delete mutation returns the deleted fixture key
+PASS GraphQL delete mutation removes the fixture row (status 200, body {"value":[]})
+PASS GraphQL schema rejects the specific permission-denied create field
 PASS initial configuration exposes RetiredWidget through REST
+PASS REST rejects paths that only share the configured path prefix
 PASS initial configuration does not expose Label
-PASS configuration-only path change exposes the same Widget entity at its new route (status 200, body {"value":[{"id":1,"name":"fixture-one","quantity":3},{"id":2,"name":"fixture-two","quantity":7}],"nextLink":"http://127.0.0.1:63280/v2/catalog/widgets?$first=2&$after=W3siRW50aXR5TmFtZSI6IldpZGdldCIsIkZpZWxkTmFtZSI6ImlkIiwiRmllbGRWYWx1ZSI6MiwiRGlyZWN0aW9uIjowfV0="})
+PASS configuration-only path change exposes the same Widget entity at its new route (status 200, body {"value":[{"id":1,"name":"fixture-one","quantity":3},{"id":2,"name":"fixture-two","quantity":7}]})
 PASS expanded REST adapter is served by the restarted host process
 PASS previous REST base path is inactive after restart
+PASS expanded REST path rejects prefix collisions without a segment boundary
 PASS configuration-only entity addition exposes Label after restart
 PASS configuration-only entity removal hides RetiredWidget after restart
 PASS expanded GraphQL schema query HTTP 200
 PASS expanded GraphQL schema query is served by the host process
 PASS expanded GraphQL schema query has no GraphQL errors (body {"data":{"labels":{"items":[{"id":1,"name":"added-by-config"}]}}})
 PASS new GraphQL entity is queryable after restart
-PASS removed entity is absent from the GraphQL schema after restart
+PASS GraphQL schema reports the removed entity field as unknown after restart
 PASS configuration changes were applied by restarting the same built binary
-PASS total checks: 32
+PASS total checks: 46
