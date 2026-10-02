@@ -8,6 +8,18 @@ An application that provides end users access to the API described by its DAB co
 Access through the application to every REST and GraphQL endpoint enabled by DAB configuration, including configured operations and permissions. Configuration changes take effect after restarting the application, without recompiling it; MCP access is optional.
 _Avoid_: Products-only integration, fixed-endpoint integration
 
+**Configured resource permission**:
+The access rule declared for a DAB resource, operation and role. An issuer role carried in a credential grants resource access only when the DAB application's validated caller and configured permission agree.
+_Avoid_: Issuer login permission, automatic role access
+
+**Local API proof**:
+Evidence for configuration-driven REST and GraphQL behavior in the embedded application, using isolated data and explicitly identified permissions. It is separate from issuer interoperability and server environment evaluation.
+_Avoid_: Complete security proof, production readiness
+
+**Issuer interoperability proof**:
+Evidence that issuer credentials reach the embedded application and the real DAB engine validates the caller and enforces configured resource permissions through REST and GraphQL. Controlled credential tests and the real Windows caller-to-issuer-account chain are distinct parts of this proof.
+_Avoid_: Issuer-only proof, anonymous API proof
+
 **Identity issuer**:
 The separate application that binds an authenticated Windows caller to an issuer account and issues access credentials from its persisted profile and roles.
 _Avoid_: DAB login service, DAB application
