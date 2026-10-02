@@ -98,6 +98,8 @@ Deploy the publish output to a dedicated test application and configure its exis
 
 At the IIS site, enable both Anonymous Authentication and Windows Authentication. Anonymous access is required for discovery/JWKS and OAuth protocol retrieval; the issuer's authorization fallback still requires Windows Authentication for the session endpoints, and `/connect/authorize` explicitly authenticates the request Windows principal. The browser verifier requires the Development environment: it checks `/diagnostics/windows-auth` and uses `/oidc-browser-test/callback` as a real same-origin public-client callback. The callback returns only an inert no-store HTML page; the verifier performs the code/PKCE exchange in that browser page. Neither test route is available in production.
 
+The callback URL carries an authorization code in its query. ASP.NET Core's `Microsoft.AspNetCore.Hosting.Diagnostics` request-start Information log includes the raw query before browser JavaScript can clear it. The issuer sets that logging category to Warning or higher in all environments, suppressing its request-start and request-finish Information messages while retaining its warnings/errors and other application logging. The browser runner never prints the callback URL. This application filter does not govern IIS/proxy access logs, telemetry collectors, traces, or custom logging providers added outside the issuer; review their query-string capture separately before server evaluation under #12.
+
 Provision a dedicated public PKCE browser client with the **exact issuer origin and application path** as its redirect URI. For local Kestrel, the existing ignored `.env` and keys can be used without printing them:
 
 ```powershell

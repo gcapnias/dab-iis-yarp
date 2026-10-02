@@ -10,6 +10,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$runnerFailures = @{
+    Open = 'playwright_open_failed'
+    RunCode = 'playwright_run_code_failed'
+    MissingResult = 'playwright_result_missing'
+}
 trap {
     [pscustomobject]@{ failure = 'browser_setup_failed' } | ConvertTo-Json -Compress
     exit 1
@@ -79,16 +84,16 @@ $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encod
 try {
     $openOutput = & $cliCommand.Source --config $configPath "-s=$session" open $metadataUrl.AbsoluteUri 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw 'playwright_open_failed'
+        throw $runnerFailures.Open
     }
     $testOutput = & $cliCommand.Source "-s=$session" run-code "--filename=$codePath" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw 'playwright_run_code_failed'
+        throw $runnerFailures.RunCode
     }
     $serialized = ($testOutput | ForEach-Object { [string]$_ }) -join "`n"
     $match = [regex]::Match($serialized, 'ISSUER_IIS_BROWSER_RESULT:(\{[^\r\n]+\})')
     if (-not $match.Success) {
-        throw 'playwright_result_missing'
+        throw $runnerFailures.MissingResult
     }
     $resultJson = $match.Groups[1].Value -replace '\\"', '"'
     $result = $resultJson | ConvertFrom-Json
@@ -98,7 +103,7 @@ try {
     }
 }
 catch {
-    $failure = if ($_.Exception.Message -match '^(playwright_open_failed|playwright_run_code_failed|playwright_result_missing)$') {
+    $failure = if ($runnerFailures.Values -contains $_.Exception.Message) {
         $_.Exception.Message
     } else {
         'browser_runner_runtime_error'

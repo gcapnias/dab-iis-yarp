@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -40,7 +41,7 @@ public sealed class IdentityIssuerHttpTests : IClassFixture<IdentityIssuerFactor
     }
 
     [Fact]
-    public async Task Only_discovery_and_signing_keys_are_anonymous()
+    public async Task Metadata_is_anonymous_while_session_endpoints_require_authentication()
     {
         using var discovery = new HttpRequestMessage(HttpMethod.Get, "/.well-known/openid-configuration");
         discovery.Headers.Add("X-Test-Anonymous", "true");
@@ -73,6 +74,22 @@ public sealed class IdentityIssuerHttpTests : IClassFixture<IdentityIssuerFactor
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Development_callback_code_is_not_written_to_application_logs()
+    {
+        const string sentinel = "synthetic-oidc-code-for-log-test";
+        var logs = new CapturedLogProvider();
+        using var app = factory.WithWebHostBuilder(builder => builder.ConfigureLogging(logging => logging.AddProvider(logs)));
+        using var browser = app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        browser.BaseAddress = new Uri("https://issuer.example.test");
+
+        using var response = await browser.GetAsync($"/oidc-browser-test/callback?code={sentinel}&state=synthetic-state");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Ticket13.LogCaptureProbe").LogWarning("capture-probe");
+        Assert.True(logs.Contains("capture-probe"));
+        Assert.False(logs.Contains(sentinel));
     }
 
     [Fact]
@@ -701,5 +718,33 @@ public sealed class FixtureIdentityDirectory : IIdentityDirectory
     {
         IdentityProfile? profile = sid == Profile.WindowsSid ? Profile : null;
         return Task.FromResult(profile);
+    }
+}
+
+internal sealed class CapturedLogProvider : ILoggerProvider
+{
+    private readonly ConcurrentQueue<string> messages = new();
+
+    public ILogger CreateLogger(string categoryName) => new CapturedLogger(messages);
+
+    public bool Contains(string value) => messages.Any(message => message.Contains(value, StringComparison.Ordinal));
+
+    public void Dispose() { }
+
+    private sealed class CapturedLogger(ConcurrentQueue<string> messages) : ILogger
+    {
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => EmptyScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => messages.Enqueue(formatter(state, exception));
+    }
+
+    private sealed class EmptyScope : IDisposable
+    {
+        public static readonly EmptyScope Instance = new();
+
+        public void Dispose() { }
     }
 }
