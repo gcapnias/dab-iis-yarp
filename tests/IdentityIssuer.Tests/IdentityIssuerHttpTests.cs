@@ -64,6 +64,18 @@ public sealed class IdentityIssuerHttpTests : IClassFixture<IdentityIssuerFactor
     }
 
     [Fact]
+    public async Task Development_browser_callback_loads_anonymously_without_caching_the_code()
+    {
+        using var callback = new HttpRequestMessage(HttpMethod.Get, "/oidc-browser-test/callback");
+        callback.Headers.Add("X-Test-Anonymous", "true");
+        using var response = await client.SendAsync(callback);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task Discovery_publishes_the_issuer_and_public_key_used_to_verify_session_tokens()
     {
         using var discoveryResponse = await client.GetAsync("/.well-known/openid-configuration");

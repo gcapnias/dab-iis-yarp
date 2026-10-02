@@ -1,6 +1,7 @@
 param(
     [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
-    [string]$Url = "https://localhost:5001"
+    [string]$Url = "https://localhost:5001",
+    [switch]$ProvisionBrowserClient
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +10,9 @@ $environmentNames = @(
     "Issuer__SigningKeyPath",
     "Issuer__EncryptionKeyPath",
     "Issuer__Url",
-    "DOTNET_ENVIRONMENT"
+    "DOTNET_ENVIRONMENT",
+    "Oidc__ClientId",
+    "Oidc__RedirectUri"
 )
 $originalEnvironment = @{}
 foreach ($name in $environmentNames) {
@@ -81,9 +84,18 @@ try {
     $env:Issuer__EncryptionKeyPath = $encryptionKeyPath
     $env:Issuer__Url = $Url
     $env:DOTNET_ENVIRONMENT = "Development"
+    if ($ProvisionBrowserClient) {
+        $env:Oidc__ClientId = "dab-issuer-browser-test-client"
+        $env:Oidc__RedirectUri = $Url.TrimEnd('/') + "/oidc-browser-test/callback"
+    }
     Push-Location $RepositoryRoot
     $pushedLocation = $true
-    dotnet run --project $project --urls $Url
+    if ($ProvisionBrowserClient) {
+        dotnet run --project $project -- --provision-oidc-client
+    }
+    else {
+        dotnet run --project $project --urls $Url
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "The issuer exited with code $LASTEXITCODE."
     }

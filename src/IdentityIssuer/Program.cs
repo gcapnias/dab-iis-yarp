@@ -183,6 +183,14 @@ if (app.Environment.IsDevelopment())
 {
     app.MapGet($"{issuerPath}/diagnostics/windows-auth", (HttpContext context) =>
         Results.Json(AuthenticatedWindowsIdentity.Describe(context.User))).RequireAuthorization();
+
+    // A real, same-origin callback lets the browser test act as a public PKCE client
+    // without granting cross-origin token access or requiring a second web server.
+    app.MapGet($"{issuerPath}/oidc-browser-test/callback", (HttpContext context) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        return Results.Content("<!doctype html><title>OIDC browser test callback</title>", "text/html");
+    }).AllowAnonymous();
 }
 
 app.MapGet(authorizePath, async (HttpContext context, IdentityProfileResolver profiles) =>
