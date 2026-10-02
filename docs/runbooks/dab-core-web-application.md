@@ -1,14 +1,14 @@
 # Start an ASP.NET Core application with DAB Core
 
-Validated on 2026-09-30 with `Microsoft.DataApiBuilder.Core` 2.0.12, .NET 8.0.31 and .NET 10.0.12 against Northwind. The [research report](../../archive/research/dab-core-hosting/README.md) contains results and evidence. This runbook reproduces a web application with its own endpoint and a custom Products read adapter using DAB's engine in the same process.
+Validated on 2026-10-02 with `Microsoft.DataApiBuilder.Core` 2.0.12 and .NET 10 against a disposable SQL Server fixture. This runbook preserves the original Products-read reproduction and now documents the configuration-driven REST/GraphQL proof. The [original hosting research](../../archive/research/dab-core-hosting/README.md) and [configuration-driven proof report](../../archive/research/dab-core-hosting/CONFIGURATION-DRIVEN-PROOF.md) contain the evidence and coverage limits.
 
 ## Current application baseline
 
 The accepted [framework and package decision](../adr/0002-net10-and-proven-dab-core-baseline.md) selects `net10.0` with Core `2.0.12` for new application work, retaining the four supplemental dependency pins below. The archived .NET 8 instructions reproduce the original package-target proof; they are not the target recommendation for the new application.
 
-The [integration decision](../adr/0001-conditional-same-process-dab-integration.md) accepts application-owned bootstrap, HTTP adapters, dependency pins, and upgrade validation. The required next proof is configuration-driven REST and GraphQL access, including configured operations and permissions, with changes taking effect after restart without recompilation. The fixed Products adapter below does not yet meet that requirement.
+The [integration decision](../adr/0001-conditional-same-process-dab-integration.md) accepts application-owned bootstrap, HTTP adapters, dependency pins, and upgrade validation. The configuration-driven proof now passes for REST CRUD/key routes, GraphQL queries and mutations, operation permissions, and entity/path changes after restarting an unchanged binary. The fixed Products adapter below remains the original narrow baseline and does not by itself establish that broader result.
 
-JWTs will come from a separate .NET 10 identity issuer. The embedded application must validate them and enforce DAB permissions through REST and GraphQL. The anonymous bootstrap below does not implement that security contract. The next preferred map ticket is the [Windows Authentication issuer research and prototype](https://github.com/gcapnias/dab-iis-yarp/issues/11), covering existing-database Profile/Roles lookup, JWT/discovery and cookie delivery, and an issuer creation runbook. The [configuration-driven API proof](https://github.com/gcapnias/dab-iis-yarp/issues/9) may run independently. The [final interoperability proof](https://github.com/gcapnias/dab-iis-yarp/issues/10) reuses both prototypes and verifies the embedded host's cookie-to-token bridge and real DAB authentication/permissions through REST and GraphQL. Issuer-side completion alone does not establish DAB compatibility.
+JWTs come from a separate .NET 10 identity issuer. The anonymous proof configurations demonstrate DAB's configured operation permissions but do not validate those issuer tokens or browser credentials. The [final interoperability proof](https://github.com/gcapnias/dab-iis-yarp/issues/10) reuses both prototypes and verifies the embedded host's cookie-to-token bridge and real DAB authentication/permissions through REST and GraphQL. Issuer-side completion and this API proof alone do not establish DAB security compatibility.
 
 If a required proof fails, diagnose the package, supplemental dependencies, and application adapter before changing versions. A demonstrated package limitation or incompatibility permits evaluation of an exact pinned 2.1 RC and repetition of the required proofs; no RC is adopted by this runbook. Preserve the same-process boundary and original evidence.
 
@@ -88,58 +88,30 @@ Remove-Item Env:DAB_ENV_FILE -ErrorAction SilentlyContinue
 
 The recorded runs passed on both frameworks. ADR-0002 subsequently selected .NET 10 for the application; the two-framework reproduction remains useful baseline evidence.
 
-## Start a new project from this configuration
+## Reproduce the configuration-driven proof (#9)
 
-From the repository root, create a web project and seed it from the independently authored bootstrap and configuration:
-
-```powershell
-dotnet new web --name NorthwindDab --output src/NorthwindDab --framework net10.0 --no-restore
-Copy-Item archive/spikes/dab-core-hosting/Host/Program.cs src/NorthwindDab/Program.cs
-Copy-Item archive/spikes/dab-core-hosting/Host/dab-config.json src/NorthwindDab/dab-config.json
-```
-
-Set the new project's package references to the following exact tested set and target `net10.0`, as selected by ADR-0002. Use the archived multi-target project above when reproducing the original .NET 8/.NET 10 comparison.
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk.Web">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.DataApiBuilder.Core" Version="2.0.12" />
-    <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.6.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
-    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-    <PackageReference Include="Humanizer.Core" Version="2.14.1" />
-  </ItemGroup>
-</Project>
-```
-
-The four supplemental dependencies fix observed missing runtime assemblies in the bundled Config code. Keep package pins with this bootstrap; their assembly versions can differ from their package versions. The code also uses dependencies restored transitively by this exact set.
+The runnable prototype and verifier are under `src/EmbeddedDab/` and `scripts/test-embedded-dab.ps1`. The verifier builds once, creates a uniquely named disposable database on the SQL Server configured by the primary checkout's ignored `.env`, runs both configurations against that same binary, then drops the fixture database. It does not write to Northwind. Run it from any checkout in this repository:
 
 ```powershell
-dotnet restore src/NorthwindDab/NorthwindDab.csproj
-dotnet build src/NorthwindDab/NorthwindDab.csproj --no-restore
-Set-Location src/NorthwindDab
-$env:DAB_ENV_FILE = 'E:/Shared/Workspaces/personal/dab-iis-yarp/.env'
-dotnet run --project NorthwindDab.csproj --no-build -- --initialize --urls http://127.0.0.1:5186
+./scripts/test-embedded-dab.ps1
 ```
 
-This seeds a disposable starting point from the tested host, including its diagnostic/verification modes. Adapt those modes and dotenv selection for the actual application's requirements before treating it as application architecture.
+The first configuration exposes `Widget` and read-only `RetiredWidget` at `/api`, with GraphQL at `/graphql`. The expanded configuration changes the global REST path to `/v2`, changes the `Widget` entity path to `catalog/widgets`, adds `Label`, and removes `RetiredWidget`; it moves GraphQL to `/gql-v2`. The verifier checks REST collection and key reads, create/upsert/update/delete operations, permission denial for a disallowed REST mutation, a GraphQL query and mutation, permission-driven omission of the read-only entity's GraphQL mutation, and route/schema changes after restarting the unchanged binary.
+
+Use `-DotEnvFile <absolute-path>` if the primary `.env` is stored elsewhere. Keep `Encrypt=True`; the development server trust setting described above is the only approved certificate exception. The script reports the generated fixture database name but never prints connection details. Its cleanup runs even when an assertion fails.
 
 ## Bootstrap requirements
 
-The complete working registration code is in [Host/Program.cs](../../archive/spikes/dab-core-hosting/Host/Program.cs). Core 2.0.12 does not supply Service/Startup or a general `AddDataApiBuilder`/`MapDataApiBuilder` hosting recipe. Preserve these steps when adapting the code:
+The original fixed-read registration code is in [Host/Program.cs](../../archive/spikes/dab-core-hosting/Host/Program.cs). The broader prototype is in [EmbeddedDab/Program.cs](../../src/EmbeddedDab/Program.cs) and [HostRequestContextInterceptor.cs](../../src/EmbeddedDab/HostRequestContextInterceptor.cs). Core 2.0.12 does not supply Service/Startup or a general `AddDataApiBuilder`/`MapDataApiBuilder` hosting recipe. The application-owned composition preserves these steps:
 
-1. Register the runtime loader/provider/validator, query/mutation/metadata factories, request validator and `RestService`, plus their public dependencies. The tested graph includes authorization resolver/handler, HTTP context, CosmosClientProvider, GQLFilterParser and FusionCache/DabCacheService even though this example reads SQL only.
-2. Configure `AddAuthentication().AddUnauthenticatedAuthentication()` and authorization services for this anonymous example. The JSON selects provider `Unauthenticated` and grants only anonymous `read` on Products.
-3. Load `RuntimeConfigProvider.GetConfig()`, await `IMetadataProviderFactory.InitializeAsync()`, check its metadata exceptions, then resolve `RestService`. Authorization initialization depends on inferred metadata.
-4. Preserve middleware order: `UseAuthentication`, `UseClientRoleHeaderAuthenticationMiddleware`, `UseAuthorization`, `UseClientRoleHeaderAuthorizationMiddleware`.
-5. Map the app's own route and the Products adapter into the same app. The adapter invokes `RestService.ExecuteAsync("Products", EntityActionOperation.Read, null)` and executes the returned MVC `IActionResult` in the current request.
+1. Register the runtime loader/provider/validator, query/mutation/metadata factories, request validator and `RestService`, plus their public dependencies. MVC result execution is also required because `RestService` returns `IActionResult` values.
+2. Register `GraphQLSchemaCreator` with the real Core query/mutation factories and compose it into Hot Chocolate through `InitializeSchemaAndResolvers`. The host request interceptor carries the current caller and `X-MS-API-ROLE` into DAB's GraphQL request context.
+3. Configure authentication and authorization for the selected proof configuration. The disposable fixture configurations use the `Unauthenticated` provider and explicit per-entity actions; they are not issuer JWT evidence.
+4. Load `RuntimeConfigProvider.GetConfig()`, await `IMetadataProviderFactory.InitializeAsync()`, check its metadata exceptions, then activate `RestService` and `GraphQLSchemaCreator`. Authorization initialization depends on inferred metadata.
+5. Preserve middleware order: `UseAuthentication`, `UseClientRoleHeaderAuthenticationMiddleware`, `UseAuthorization`, `UseClientRoleHeaderAuthorizationMiddleware`.
+6. Dispatch requests using the loaded runtime paths and configured entity paths. REST verbs map to DAB `EntityActionOperation` values, and the returned MVC `IActionResult` executes in the current ASP.NET Core request. GraphQL fields and resolvers come from the configured Core schema creator.
 
-The [configuration](../../archive/spikes/dab-core-hosting/Host/dab-config.json) reads `@env('DAB_CONNECTION_STRING')`, enables REST at `/api`, disables GraphQL, and maps Products to `dbo.Products`. Adding an entity to JSON alone does not create another HTTP route: this host explicitly maps just the Products collection read.
+The original [configuration](../../archive/spikes/dab-core-hosting/Host/dab-config.json) reads `@env('DAB_CONNECTION_STRING')`, enables REST at `/api`, disables GraphQL, and maps Products to `dbo.Products`; its app maps only the Products collection read. The new prototype reads the same environment variable and derives all entity routes and the GraphQL schema from the active DAB configuration.
 
 ## Troubleshooting and limits
 
@@ -148,8 +120,8 @@ The [configuration](../../archive/spikes/dab-core-hosting/Host/dab-config.json) 
 | Missing KeyVault, OpenTelemetry, Serilog File or Humanizer assembly | Restore all five direct package pins; Core alone compiled but failed at runtime. |
 | SQL TLS certificate chain untrusted | Verify the intended connection's Encrypt/TrustServerCertificate flags privately. Use the approved development trust option or a trusted server certificate. |
 | Products object not inferred | Ensure initialization runs before RestService/authorization activation and that SQL metadata permissions are available. |
-| DAB request lacks a client role | Preserve the unauthenticated provider and both Core client-role middleware steps. |
+| GraphQL mutation reports no client role | Preserve the host-owned GraphQL request interceptor and ensure it places the client-role header in request context. |
 | Configuration file missing | Run from the project directory or set a deliberate content root/config path. |
 | Address already in use | Select an unused localhost port and stop only the host started for this run. |
 
-This proves a custom anonymous collection-read adapter and clean shutdown. It does not establish complete REST CRUD/key-route coverage, GraphQL/MCP, production authentication, hot reload, observability, IIS deployment or an upstream-supported hosting contract. Keep secrets out of diagnostics: the supplied spike disables logging providers and sanitizes exception strings rather than providing a production logging design.
+The original Products proof establishes only an anonymous collection read and same-process shutdown. Ticket #9 adds fixture-backed REST CRUD/key routes, GraphQL query/mutation, configuration permissions, and restart-based configuration changes. The combined evidence does not establish issuer JWT compatibility, role-selection security, live reload, MCP, production observability, IIS deployment, or an upstream-supported hosting contract. Keep secrets out of diagnostics; the prototype disables logging providers and returns generic errors for rejected REST requests.

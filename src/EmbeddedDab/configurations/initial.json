@@ -1,0 +1,23 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v2.0.12/dab.draft.schema.json",
+  "data-source": { "database-type": "mssql", "connection-string": "@env('DAB_CONNECTION_STRING')" },
+  "runtime": {
+    "rest": { "enabled": true, "path": "/api" },
+    "graphql": { "enabled": true, "path": "/graphql", "allow-introspection": true },
+    "host": { "mode": "development", "authentication": { "provider": "Unauthenticated" } }
+  },
+  "entities": {
+    "Widget": {
+      "source": { "object": "dbo.Widgets", "type": "table" },
+      "rest": true,
+      "graphql": true,
+      "permissions": [{ "role": "anonymous", "actions": ["create", "read", "update", "delete"] }]
+    },
+    "RetiredWidget": {
+      "source": { "object": "dbo.RetiredWidgets", "type": "table" },
+      "rest": true,
+      "graphql": true,
+      "permissions": [{ "role": "anonymous", "actions": ["read"] }]
+    }
+  }
+}
