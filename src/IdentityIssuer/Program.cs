@@ -106,6 +106,7 @@ builder.Services.AddIssuerIdentityStores();
 builder.Services.AddScoped<IIdentityDirectory, AspNetIdentityDirectory>();
 builder.Services.AddScoped<IdentityProfileResolver>();
 builder.Services.AddScoped<IdentityProvisioner>();
+builder.Services.AddScoped<OidcRefreshFamilyRevoker>();
 builder.Services.AddScoped(_ => new RefreshTokenService(
     _.GetRequiredService<ApplicationDbContext>(), TimeSpan.FromDays(refreshLifetimeDays)));
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
@@ -212,21 +213,9 @@ app.MapGet(authorizePath, async (HttpContext context, IdentityProfileResolver pr
 
     var profile = lookup.Profile!;
     var identity = new ClaimsIdentity(TokenValidationParameters.DefaultAuthenticationType, Claims.Name, Claims.Role);
-    identity.AddClaim(new Claim(Claims.Subject, profile.Subject));
-    identity.AddClaim(new Claim("issuer_windows_sid", profile.WindowsSid));
-    identity.AddClaim(new Claim("profile_id", profile.ProfileId));
-    if (!string.IsNullOrWhiteSpace(profile.DisplayName))
-        identity.AddClaim(new Claim(Claims.Name, profile.DisplayName));
-    foreach (var role in profile.Roles)
-        identity.AddClaim(new Claim(Claims.Role, role));
-    foreach (var claim in profile.Claims)
-        identity.AddClaim(new Claim(claim.Key, claim.Value));
-    if (!string.IsNullOrWhiteSpace(profile.SecurityStamp))
-        identity.AddClaim(new Claim("issuer_security_stamp", profile.SecurityStamp));
-
     identity.SetScopes(request.GetScopes());
+    OidcProfileClaims.Replace(identity, profile);
     identity.SetResources(audience);
-    identity.SetDestinations(OidcClaimDestinations.For);
 
     return Results.SignIn(new ClaimsPrincipal(identity), authenticationScheme: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 }).AllowAnonymous();
@@ -250,30 +239,18 @@ app.MapPost($"{issuerPath}/session", async (HttpContext context, IAntiforgery an
     }
 
     var issuedAt = DateTimeOffset.UtcNow;
-    var expires = issuedAt.Add(settings.Lifetime);
     var jwt = tokens.CreateToken(lookup.Profile!, issuedAt);
-    context.Response.Cookies.Append(settings.CookieName, jwt, new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = true,
-        SameSite = SameSiteMode.Lax,
-        IsEssential = true,
-        Expires = expires,
-        Path = "/",
-        Domain = settings.CookieDomain
-    });
     var refreshToken = await context.RequestServices.GetRequiredService<RefreshTokenService>()
         .CreateAsync(lookup.Profile!, issuedAt, context.RequestAborted);
-    context.Response.Cookies.Append(refreshCookieName, refreshToken, new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = true,
-        SameSite = SameSiteMode.Strict,
-        IsEssential = true,
-        Expires = issuedAt.AddDays(refreshLifetimeDays),
-        Path = issuerPath,
-        Domain = settings.CookieDomain
-    });
+    IssuerSessionCookies.Write(
+        context.Response,
+        settings,
+        refreshCookieName,
+        issuerPath,
+        jwt,
+        refreshToken,
+        issuedAt,
+        TimeSpan.FromDays(refreshLifetimeDays));
     return Results.NoContent();
 }).RequireAuthorization();
 
@@ -294,30 +271,19 @@ app.MapPost($"{issuerPath}/session/refresh", async (HttpContext context, IAntifo
     var rotation = await service.RotateAsync(presentedToken, lookup.Profile!, now, context.RequestAborted);
     if (rotation.Status != RefreshTokenRotationStatus.Rotated)
     {
-        context.Response.Cookies.Delete(refreshCookieName, new CookieOptions { Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict, Path = issuerPath, Domain = settings.CookieDomain });
+        IssuerSessionCookies.ExpireRefresh(context.Response, settings, refreshCookieName, issuerPath);
         return Results.Unauthorized();
     }
 
-    context.Response.Cookies.Append(settings.CookieName, tokens.CreateToken(lookup.Profile!, now), new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = true,
-        SameSite = SameSiteMode.Lax,
-        IsEssential = true,
-        Expires = now.Add(settings.Lifetime),
-        Path = "/",
-        Domain = settings.CookieDomain
-    });
-    context.Response.Cookies.Append(refreshCookieName, rotation.ReplacementToken!, new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = true,
-        SameSite = SameSiteMode.Strict,
-        IsEssential = true,
-        Expires = now.AddDays(refreshLifetimeDays),
-        Path = issuerPath,
-        Domain = settings.CookieDomain
-    });
+    IssuerSessionCookies.Write(
+        context.Response,
+        settings,
+        refreshCookieName,
+        issuerPath,
+        tokens.CreateToken(lookup.Profile!, now),
+        rotation.ReplacementToken!,
+        now,
+        TimeSpan.FromDays(refreshLifetimeDays));
     return Results.NoContent();
 }).RequireAuthorization();
 
@@ -328,8 +294,7 @@ app.MapPost($"{issuerPath}/session/logout", async (HttpContext context, IAntifor
 
     if (context.Request.Cookies.TryGetValue(refreshCookieName, out var refreshToken))
         await context.RequestServices.GetRequiredService<RefreshTokenService>().RevokeAsync(refreshToken, DateTimeOffset.UtcNow, context.RequestAborted);
-    context.Response.Cookies.Delete(settings.CookieName, new CookieOptions { Secure = true, HttpOnly = true, SameSite = SameSiteMode.Lax, Path = "/", Domain = settings.CookieDomain });
-    context.Response.Cookies.Delete(refreshCookieName, new CookieOptions { Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict, Path = issuerPath, Domain = settings.CookieDomain });
+    IssuerSessionCookies.ExpireAll(context.Response, settings, refreshCookieName, issuerPath);
     return Results.NoContent();
 }).RequireAuthorization();
 

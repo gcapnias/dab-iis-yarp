@@ -7,7 +7,7 @@ namespace IdentityIssuer;
 public static class OidcClaimDestinations
 {
     private const string ProfileId = "profile_id";
-    private const string ClearanceLevel = "ClearanceLevel";
+    public const string ClearanceLevel = "ClearanceLevel";
 
     public static IEnumerable<string> For(Claim claim)
     {

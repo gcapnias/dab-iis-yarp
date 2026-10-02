@@ -7,7 +7,24 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace IdentityIssuer;
 
-public sealed class DetectOidcRefreshReplay(ApplicationDbContext database, IOpenIddictTokenManager tokens)
+public sealed class OidcRefreshFamilyRevoker(ApplicationDbContext database, IOpenIddictTokenManager tokens)
+{
+    public async Task RevokeAsync(string authorizationId, CancellationToken cancellationToken)
+    {
+        var family = await database.OidcRefreshTokenUses
+            .Where(item => item.AuthorizationId == authorizationId && item.FamilyRevokedAt == null)
+            .ToListAsync(cancellationToken);
+        var revokedAt = DateTimeOffset.UtcNow;
+        foreach (var item in family)
+            item.FamilyRevokedAt = revokedAt;
+        if (family.Count > 0)
+            await database.SaveChangesAsync(cancellationToken);
+        if (database.Database.IsRelational())
+            await tokens.RevokeByAuthorizationIdAsync(authorizationId, cancellationToken);
+    }
+}
+
+public sealed class DetectOidcRefreshReplay(ApplicationDbContext database, OidcRefreshFamilyRevoker revoker)
     : IOpenIddictServerHandler<OpenIddictServerEvents.ValidateTokenContext>
 {
     public async ValueTask HandleAsync(OpenIddictServerEvents.ValidateTokenContext context)
@@ -22,14 +39,7 @@ public sealed class DetectOidcRefreshReplay(ApplicationDbContext database, IOpen
         if (!replay)
             return;
 
-        var family = await database.OidcRefreshTokenUses
-            .Where(item => item.AuthorizationId == context.AuthorizationId && item.FamilyRevokedAt == null)
-            .ToListAsync(context.Transaction.CancellationToken);
-        foreach (var item in family)
-            item.FamilyRevokedAt = DateTimeOffset.UtcNow;
-        await database.SaveChangesAsync(context.Transaction.CancellationToken);
-        if (database.Database.IsRelational())
-            await tokens.RevokeByAuthorizationIdAsync(context.AuthorizationId, context.Transaction.CancellationToken);
+        await revoker.RevokeAsync(context.AuthorizationId, context.Transaction.CancellationToken);
         context.Reject(Errors.InvalidToken, "The issuer refresh token was already used; the token family was revoked.");
     }
 }
@@ -38,11 +48,11 @@ public sealed class ValidateOidcRefreshAccountState(
     IdentityProfileResolver profiles,
     UserManager<ApplicationUser> users,
     ApplicationDbContext database,
-    IOpenIddictTokenManager tokens)
+    OidcRefreshFamilyRevoker revoker)
     : IOpenIddictServerHandler<OpenIddictServerEvents.ProcessAuthenticationContext>
 {
-    private const string WindowsSidClaim = "issuer_windows_sid";
-    private const string SecurityStampClaim = "issuer_security_stamp";
+    private const string WindowsSidClaim = OidcProfileClaims.WindowsSid;
+    private const string SecurityStampClaim = OidcProfileClaims.SecurityStamp;
 
     public async ValueTask HandleAsync(OpenIddictServerEvents.ProcessAuthenticationContext context)
     {
@@ -89,23 +99,7 @@ public sealed class ValidateOidcRefreshAccountState(
             return;
         }
 
-        foreach (var claim in identity.Claims.Where(claim =>
-                     claim.Type is Claims.Subject or Claims.Name or "profile_id" or Claims.Role or "ClearanceLevel" or SecurityStampClaim or WindowsSidClaim).ToArray())
-            identity.RemoveClaim(claim);
-
-        identity.AddClaim(new Claim(Claims.Subject, profile.Subject));
-        identity.AddClaim(new Claim(WindowsSidClaim, profile.WindowsSid));
-        if (!string.IsNullOrWhiteSpace(profile.SecurityStamp))
-            identity.AddClaim(new Claim(SecurityStampClaim, profile.SecurityStamp));
-        identity.AddClaim(new Claim("profile_id", profile.ProfileId));
-        if (!string.IsNullOrWhiteSpace(profile.DisplayName))
-            identity.AddClaim(new Claim(Claims.Name, profile.DisplayName));
-        foreach (var role in profile.Roles)
-            identity.AddClaim(new Claim(Claims.Role, role));
-        foreach (var claim in profile.Claims)
-            identity.AddClaim(new Claim(claim.Key, claim.Value));
-
-        principal!.SetDestinations(OidcClaimDestinations.For);
+        OidcProfileClaims.Replace(identity, profile);
 
         var authorizationId = principal!.GetAuthorizationId();
         var tokenId = principal!.GetTokenId();
@@ -121,8 +115,7 @@ public sealed class ValidateOidcRefreshAccountState(
             context.Transaction.CancellationToken);
         if (familyRevoked)
         {
-            if (database.Database.IsRelational())
-                await tokens.RevokeByAuthorizationIdAsync(authorizationId, context.Transaction.CancellationToken);
+            await revoker.RevokeAsync(authorizationId, context.Transaction.CancellationToken);
             context.Reject(Errors.InvalidGrant, "The issuer refresh-token family was revoked after replay.");
             return;
         }
@@ -146,14 +139,7 @@ public sealed class ValidateOidcRefreshAccountState(
                     item.AuthorizationId == authorizationId && item.TokenId == tokenId,
                     context.Transaction.CancellationToken))
             {
-                var family = await database.OidcRefreshTokenUses
-                    .Where(item => item.AuthorizationId == authorizationId && item.FamilyRevokedAt == null)
-                    .ToListAsync(context.Transaction.CancellationToken);
-                foreach (var item in family)
-                    item.FamilyRevokedAt = DateTimeOffset.UtcNow;
-                await database.SaveChangesAsync(context.Transaction.CancellationToken);
-                if (database.Database.IsRelational())
-                    await tokens.RevokeByAuthorizationIdAsync(authorizationId, context.Transaction.CancellationToken);
+                await revoker.RevokeAsync(authorizationId, context.Transaction.CancellationToken);
                 context.Reject(Errors.InvalidGrant, "The issuer refresh token was already used; the token family was revoked.");
             }
             else
