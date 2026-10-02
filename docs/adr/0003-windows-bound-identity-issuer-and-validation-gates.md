@@ -1,0 +1,19 @@
+---
+status: accepted
+---
+
+# Windows-bound Identity issuer with separate validation gates
+
+The separate .NET 10 issuer uses ASP.NET Core Identity and an EF Core SQL Server application context to own accounts, profiles, roles and permitted claims. The user selected disposable Northwind for the proof, superseding an external identity-schema requirement and an interim SQLite proposal. Northwind is a test environment, not a runtime catalog restriction; the configured SQL Server catalog is reusable. Identity migrations and synthetic test data are isolated from the sample DAB tables.
+
+Bind accounts to the authenticated request's Windows SID on supported Windows IIS or Kestrel/Negotiate hosts. Reading the request token's SID requires a valid queryable token handle, not an AD search account or administrator membership; the worker/process identity must not identify the caller. Local-account SIDs are machine-specific. Missing mappings, absent roles, disabled or locked accounts and conflicting permitted claims fail closed. Account provisioning and role assignment are operator-controlled; there is no automatic Windows-group-to-role assignment or password-login requirement.
+
+Use genuine OpenIddict authorization-code/PKCE and discovery/public-key endpoints rather than advertising fictitious OIDC capabilities in a minimal key document. Keep Windows authentication on caller/session and authorization paths while allowing the public metadata and protocol endpoints required by OIDC. Access credentials carry intended persisted profile/role claims with scope-aware destinations. Refresh credentials are persisted and rotated; replay revokes the affected family, account/security-stamp changes prevent renewal, and cleanup preserves replay evidence until the relevant credential expires. Clearing cookies or revoking refresh does not revoke an already-issued stateless access JWT before its expiry.
+
+The browser cookie session is distinct from Windows Authentication caching. Access and refresh cookies have explicit lifetimes and stable issuance/deletion paths; a root issuer uses an explicit `/` path so rotation replaces the same cookie instead of creating a second path-scoped cookie. Private test signing/encryption keys are retained inside the repository's gitignored `.scratch/identity-issuer/keys/` directory and are excluded from tracked and published artifacts.
+
+Complete local implementation, local proofs, reviews and runbooks before environment evaluation. The remaining browser OIDC verifier/navigation/CORS investigation is [#13](https://github.com/gcapnias/dab-iis-yarp/issues/13), under issuer [#11](https://github.com/gcapnias/dab-iis-yarp/issues/11). Embedded DAB token/cookie bridging and REST/GraphQL permissions remain [#10](https://github.com/gcapnias/dab-iis-yarp/issues/10); real Windows Server/IIS evaluation is the final map step [#12](https://github.com/gcapnias/dab-iis-yarp/issues/12), after local issuer/API/interoperability delivery. These gates do not change the same-process DAB boundary in ADR-0001 or the framework/package baseline in ADR-0002.
+
+No software, IIS features or certificate trust changes are installed on the development workstation. The approved Playwright test context uses `ignoreHTTPSErrors: true` for local/self-signed certificates in both local and server test environments; that browser proof excludes certificate-chain and hostname validation, and does not alter production TLS settings. A local Kestrel browser result is not IIS evidence or production readiness.
+
+See the [issuer runbook](../runbooks/windows-authentication-jwt-issuer.md), [Windows-principal research](../../archive/research/identity-issuer/windows-principal-identity-binding.md), and [session handoff](../../archive/research/identity-issuer/session-handoff-2026-10-02.md) for contracts, evidence and remaining work.

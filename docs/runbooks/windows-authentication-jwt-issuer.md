@@ -129,3 +129,7 @@ The browser check validates discovery issuer, Windows request identity type/SID-
 ## Evidence and limits
 
 The current live record is [live-proof-2026-10-02.md](../../archive/research/identity-issuer/live-proof-2026-10-02.md), with the requirement coverage matrix in [implementation-report.md](../../archive/research/identity-issuer/implementation-report.md). Real Kestrel/Negotiate, SQL-backed Identity, cookies, discovery/JWKS, OIDC PKCE, and refresh were exercised. The test workstation has no W3SVC/WAS, `appcmd.exe`, or ANCM v2; no IIS features, bundles, browsers, or certificates were installed or enabled. The deployable IIS browser verification is prepared, but its live result is pending the external Windows Server test site. Actual DAB REST/GraphQL compatibility remains ticket #10.
+
+## Pending browser-verifier investigation
+
+[Ticket #13](https://github.com/gcapnias/dab-iis-yarp/issues/13) tracks the separate-origin callback navigation/token-fetch/CORS limitation and the Development-only diagnostic prerequisite mismatch in the current browser verifier. Its [investigation report](../../archive/research/identity-issuer/browser-oidc-investigation.md) records the reproducible revision and evidence. The script does not yet provide a passing browser OIDC exchange proof; use its results only for checks explicitly completed. Windows Server/IIS execution remains #12.

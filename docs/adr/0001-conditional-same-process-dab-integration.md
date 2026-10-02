@@ -25,3 +25,5 @@ Preferred work order is expressed by native map child order, not by a technical 
 Develop both runnable proof prototypes under `src/` on `develop`: the JWT issuer and the DAB-integrated application. Their purpose is to validate the architecture and provide reproducible evidence for the implementation specification, rather than deliver production applications.
 
 Decision ticket: [Decide whether Core-only same-process DAB is viable](https://github.com/gcapnias/dab-iis-yarp/issues/7). Evidence: [Core hosting research](../../archive/research/dab-core-hosting/README.md).
+
+The issuer persistence, Windows-account binding, genuine OIDC/refresh requirements, and separate local/browser/server validation gates were refined during the issuer implementation. [ADR-0003](0003-windows-bound-identity-issuer-and-validation-gates.md) records the accepted changes, including application-owned Identity persistence in the disposable development database rather than a required external identity schema. The same-process DAB boundary remains unchanged.

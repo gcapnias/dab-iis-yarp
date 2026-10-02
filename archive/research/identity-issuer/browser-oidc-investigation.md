@@ -76,3 +76,12 @@ These are hypotheses, not established causes. Browser cached Windows credentials
 Pin a committed revision and exact tool versions. Demonstrate a fresh-browser code/PKCE exchange, signed ID/access token validation with issuer/audience/nonce/claim assertions, refresh rotation, rejection of old-token replay and rotated descendants. Preserve the passing cookie/session assertions. Ensure sanitized result emission and correct process exit on every failure, cleanup only this test's sessions, and update report/runbook with the verified cause/fix and actual limitations.
 
 Real Windows Server/IIS execution remains #12; this investigation can run locally.
+## Follow-up review and persisted revision
+
+The completed follow-up is commit `144a73b509bfeff12b1842d60ea1bd04da35250d`, now integrated onto local develop. The implementer reported a clean Release build and 32 passing tests; no subsequent browser rerun was performed when filing this handoff.
+
+Read-only review identified a deterministic flow mismatch to investigate alongside navigation: the verifier navigates to the separately registered client callback, then uses page JavaScript `fetch` to post to the issuer token endpoint. With distinct origins and the documented issuer CORS policy, that request is expected to be blocked unless the flow is redesigned; this does not prove that such a POST occurred in the earlier failing runs. The investigator must choose and test a real browser/public-client origin contract rather than silently substitute an API-only client or enable broad credentialed CORS.
+
+The IIS verifier also always requests the Development-only `/diagnostics/windows-auth` route, whereas its runbook calls Development optional. Make that test prerequisite explicit or make that diagnostic check optional. A minor unused result-file variable can be removed with the verifier fix. These are verifier reliability issues, not verified OIDC issuer defects.
+
+These follow-up findings are included in #13. Actual IIS execution remains #12.
