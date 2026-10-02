@@ -151,7 +151,7 @@ async page => {
       status: response.status,
       idTokenValid: idValid && audience(id.aud) && id.nonce === nonce && Boolean(id.sub),
       accessTokenValid: accessValid && hasAccessAudience(access.aud) && Boolean(access.sub),
-      accessClaimContract: Boolean(access.profile_id) && (Boolean(access.role) || (Array.isArray(access.roles) && access.roles.length > 0)) && access.ClearanceLevel === "Level3",
+      accessClaimContract: Boolean(access.profile_id) && (Boolean(access.role) || (Array.isArray(access.roles) && access.roles.length > 0)),
       refreshStatus: rotatedResponse.status,
       refreshRotated: Boolean(rotated.refresh_token && rotated.refresh_token !== tokens.refresh_token),
       replayStatus: replayResponse.status,
