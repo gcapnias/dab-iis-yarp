@@ -13,6 +13,8 @@ async page => {
   requireCheck(new URL(metadata.issuer).href === new URL(options.issuer).href, "discovery_issuer_matches");
   const basePath = new URL(metadata.issuer).pathname.replace(/\/$/, "");
   const endpoint = name => `${basePath}/${name}`;
+  const callbackUri = new URL(options.redirectUri);
+  requireCheck(callbackUri.origin === issuer.origin && callbackUri.pathname === endpoint("oidc-browser-test/callback"), "same_origin_test_callback_configured");
 
   const identityResponse = await page.evaluate(async path => {
     const response = await fetch(path, { credentials: "same-origin" });
@@ -83,6 +85,7 @@ async page => {
   const nonceBytes = crypto.getRandomValues(new Uint8Array(24));
   const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
   const nonce = bytesToBase64Url(nonceBytes);
+  const state = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const verifier = bytesToBase64Url(verifierBytes);
   const challenge = bytesToBase64Url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
   const authorize = new URL(metadata.authorization_endpoint);
@@ -91,15 +94,22 @@ async page => {
     redirect_uri: options.redirectUri,
     response_type: "code",
     scope: "openid profile roles offline_access",
+    state,
     nonce,
     code_challenge: challenge,
     code_challenge_method: "S256"
   }).toString();
-  const callbackRequest = page.waitForRequest(request => request.url().startsWith(options.redirectUri));
-  try { await page.goto(authorize.toString()); } catch { /* A registered test callback need not host an application. */ }
-  const callback = await callbackRequest;
-  const code = new URL(callback.url()).searchParams.get("code");
+  stage = "oidc_callback_navigation";
+  const callbackResponse = await page.goto(authorize.toString());
+  const callbackLocation = new URL(page.url());
+  // Keep the code in this test's memory only, even if a later assertion fails.
+  try { await page.evaluate(() => history.replaceState(null, "", location.pathname)); } catch { }
+  requireCheck(callbackResponse?.status() === 200, "oidc_callback_loaded");
+  requireCheck(callbackLocation.origin === callbackUri.origin && callbackLocation.pathname === callbackUri.pathname, "oidc_callback_origin_and_path");
+  requireCheck(callbackLocation.searchParams.get("state") === state, "oidc_callback_state_matches");
+  const code = callbackLocation.searchParams.get("code");
   requireCheck(Boolean(code), "windows_oidc_authorize_returned_code");
+  requireCheck(await page.evaluate(tokenEndpoint => location.origin === new URL(tokenEndpoint).origin, metadata.token_endpoint), "oidc_token_fetch_same_origin");
   stage = "oidc_code_pkce_exchange";
   const oidcTokens = await page.evaluate(async ({ tokenEndpoint, clientId, accessAudience, redirectUri, code, verifier, nonce, issuer, jwksUri }) => {
     let operation = "token_post";
@@ -122,7 +132,7 @@ async page => {
       const cryptoKey = await crypto.subtle.importKey("jwk", key, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
       const signature = Uint8Array.from(atob(encodedSignature.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encodedSignature.length / 4) * 4, "=")), c => c.charCodeAt(0));
       const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", cryptoKey, signature, new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`));
-      return valid && payload.iss === issuer && Number(payload.exp) > Date.now() / 1000;
+      return valid && header.alg === "RS256" && payload.iss === issuer && Number(payload.exp) > Date.now() / 1000;
     };
     const id = typeof tokens.id_token === "string" ? decode(tokens.id_token.split(".")[1]) : {};
     const access = typeof tokens.access_token === "string" ? decode(tokens.access_token.split(".")[1]) : {};
@@ -169,7 +179,6 @@ async page => {
   requireCheck(oidcTokens.refreshStatus === 200 && oidcTokens.refreshRotated, "oidc_refresh_rotation");
   requireCheck(oidcTokens.replayStatus === 400 && oidcTokens.descendantReplayStatus === 400, "oidc_refresh_replay_family_revocation");
 
-  await page.goto(discoveryUrl.toString());
   stage = "complete";
   return `ISSUER_IIS_BROWSER_RESULT:${JSON.stringify(result)}`;
   } catch (error) {
@@ -177,7 +186,7 @@ async page => {
     result.failure = check?.[1] ?? `${stage}_runtime_${String(error?.name ?? "error").toLowerCase()}`;
     try {
       const issuer = new URL(options.issuer);
-      await page.goto(new URL(`${issuer.pathname.replace(/\/$/, "")}/.well-known/openid-configuration`, issuer.origin).toString());
+      await page.goto(new URL(`${issuer.pathname.replace(/\/$/, "")}/.well-known/openid-configuration`, issuer.origin).toString(), { timeout: 5000 });
     } catch { }
     return `ISSUER_IIS_BROWSER_RESULT:${JSON.stringify(result)}`;
   }

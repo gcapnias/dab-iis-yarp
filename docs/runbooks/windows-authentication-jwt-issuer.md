@@ -96,15 +96,25 @@ The tests also reject wrong issuers, audiences, expiry, unknown key IDs, tampere
 
 Deploy the publish output to a dedicated test application and configure its existing app pool to use `ApplicationPoolIdentity` with no administrator membership. Configure the issuer URL, audience, signing/encryption key file paths, Identity SQL connection string, OIDC client ID/redirect URI, and `WindowsAuthentication:Mode=IIS` using the test site's approved secret/configuration mechanism. The app pool needs read/execute access to publish output and read access only to the configured private-key files. If integrated SQL authentication is used, the selected app-pool identity needs the minimum required access to the isolated `IdentityIssuer` schema. Provision an authorized synthetic Windows SID mapping, enabled Identity user, role, and allowlisted claim in the development database before testing.
 
-At the IIS site, enable both Anonymous Authentication and Windows Authentication. Anonymous access is required for discovery/JWKS and OAuth protocol retrieval; the issuer's authorization fallback still requires Windows Authentication for the session endpoints, and `/connect/authorize` explicitly authenticates the request Windows principal. The test app may use the Development environment to expose `/diagnostics/windows-auth`, which returns only identity type and SID-presence booleans. Do not enable that diagnostic in production.
+At the IIS site, enable both Anonymous Authentication and Windows Authentication. Anonymous access is required for discovery/JWKS and OAuth protocol retrieval; the issuer's authorization fallback still requires Windows Authentication for the session endpoints, and `/connect/authorize` explicitly authenticates the request Windows principal. The browser verifier requires the Development environment: it checks `/diagnostics/windows-auth` and uses `/oidc-browser-test/callback` as a real same-origin public-client callback. The callback returns only an inert no-store HTML page; the verifier performs the code/PKCE exchange in that browser page. Neither test route is available in production.
+
+The callback URL carries an authorization code in its query. ASP.NET Core's `Microsoft.AspNetCore.Hosting.Diagnostics` request-start Information log includes the raw query before browser JavaScript can clear it. The issuer sets that logging category to Warning or higher in all environments, suppressing its request-start and request-finish Information messages while retaining its warnings/errors and other application logging. The browser runner never prints the callback URL. This application filter does not govern IIS/proxy access logs, telemetry collectors, traces, or custom logging providers added outside the issuer; review their query-string capture separately before server evaluation under #12.
+
+Provision a dedicated public PKCE browser client with the **exact issuer origin and application path** as its redirect URI. For local Kestrel, the existing ignored `.env` and keys can be used without printing them:
+
+```powershell
+pwsh .\scripts\run-identity-issuer.ps1 -ProvisionBrowserClient -Url https://localhost:5001
+```
+
+This registers `dab-issuer-browser-test-client` with `https://localhost:5001/oidc-browser-test/callback` in the authorized development Identity store. It does not replace the separate native client used by the PowerShell protocol harness. On an IIS test site, provision a distinct browser client with the site's exact HTTPS issuer origin and application path using the documented operator command and configuration overrides. The issuer intentionally grants no token-endpoint CORS access to a separate-origin callback.
 
 Run the installed Playwright CLI verifier from this checkout, in an interactive logon for the intended Windows test account:
 
 ```powershell
 pwsh .\scripts\test-identity-issuer-iis.ps1 `
   -Issuer 'https://issuer-test.example/identity' `
-  -ClientId 'the-provisioned-public-client-id' `
-  -RedirectUri 'https://client-test.example/callback' `
+  -ClientId 'the-provisioned-browser-public-client-id' `
+  -RedirectUri 'https://issuer-test.example/identity/oidc-browser-test/callback' `
   -AccessAudience 'the-configured-resource-audience'
 ```
 
@@ -124,7 +134,7 @@ The test-only browser config is [playwright-cli.iis-test.config.json](../../requ
 
 This setting allows local/self-signed certificates in test Kestrel and Windows Server IIS test environments without installing or trusting them in the workstation certificate store. It bypasses certificate-chain and hostname validation in the browser test; it is not an application TLS setting and does not establish production certificate validity. Production browsers and resource clients should perform normal HTTPS certificate validation.
 
-The browser check validates discovery issuer, Windows request identity type/SID-presence booleans, antiforgery rejection, session creation, cookie attributes and JavaScript invisibility, refresh replacement/replay, and logout. A local Edge/Kestrel run completed those browser checks, including sequential cookie rotation and expiry. Its OIDC browser authorize step returned a code, but the CLI navigation back from the test callback to the issuer failed before token exchange; the separate PowerShell live harness and automated tests cover OIDC code/PKCE and token validation. A passing local Kestrel browser run is separate from IIS evidence. The IIS result remains pending under [ticket #12](https://github.com/gcapnias/dab-iis-yarp/issues/12), which owns execution on an identified Windows Server endpoint with existing prerequisites, provisioned test client, and synthetic Windows-to-Identity mapping.
+The browser check validates discovery issuer, Windows request identity type/SID-presence booleans, antiforgery rejection, session creation, cookie attributes and JavaScript invisibility, refresh replacement/replay, logout, callback state and origin, code/PKCE exchange, signed ID/access tokens, and OIDC refresh replay-family revocation. The earlier separate-origin callback run stopped before token exchange; the corrected same-origin local Kestrel run passed every browser check with exit 0. [Ticket #13](https://github.com/gcapnias/dab-iis-yarp/issues/13) records the investigation and exact local evidence. A passing local Kestrel browser run is separate from IIS evidence. The IIS result remains pending under [ticket #12](https://github.com/gcapnias/dab-iis-yarp/issues/12), which owns execution on an identified Windows Server endpoint with existing prerequisites, provisioned test client, and synthetic Windows-to-Identity mapping.
 
 ## Evidence and limits
 

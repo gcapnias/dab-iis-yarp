@@ -28,6 +28,10 @@ if (OpenIddictClientProvisioningCommand.IsRequested(args))
 }
 
 var builder = WebApplication.CreateBuilder(args);
+// ASP.NET Core's request-start Information log includes the raw query string.
+// OIDC callback queries carry one-use codes, so retain warnings while omitting
+// this category's request-start/finish Information messages for every host.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 var issuer = builder.Configuration["Issuer:Url"] ?? throw new InvalidOperationException("Issuer:Url is required.");
 var audience = builder.Configuration["Issuer:Audience"] ?? throw new InvalidOperationException("Issuer:Audience is required.");
 var keyId = builder.Configuration["Issuer:KeyId"] ?? throw new InvalidOperationException("Issuer:KeyId is required.");
@@ -183,6 +187,14 @@ if (app.Environment.IsDevelopment())
 {
     app.MapGet($"{issuerPath}/diagnostics/windows-auth", (HttpContext context) =>
         Results.Json(AuthenticatedWindowsIdentity.Describe(context.User))).RequireAuthorization();
+
+    // A real, same-origin callback lets the browser test act as a public PKCE client
+    // without granting cross-origin token access or requiring a second web server.
+    app.MapGet($"{issuerPath}/oidc-browser-test/callback", (HttpContext context) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        return Results.Content("<!doctype html><title>OIDC browser test callback</title>", "text/html");
+    }).AllowAnonymous();
 }
 
 app.MapGet(authorizePath, async (HttpContext context, IdentityProfileResolver profiles) =>

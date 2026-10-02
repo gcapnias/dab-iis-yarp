@@ -10,11 +10,24 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$runnerFailures = @{
+    Open = 'playwright_open_failed'
+    RunCode = 'playwright_run_code_failed'
+    MissingResult = 'playwright_result_missing'
+}
+trap {
+    [pscustomobject]@{ failure = 'browser_setup_failed' } | ConvertTo-Json -Compress
+    exit 1
+}
 if ($Issuer.Scheme -ne 'https' -or $Issuer.Query -or $Issuer.Fragment) {
     throw 'Issuer must be an absolute HTTPS URL without query or fragment.'
 }
 if ($RedirectUri.Scheme -ne 'https' -or $RedirectUri.Query -or $RedirectUri.Fragment) {
     throw 'The registered redirect URI must be an absolute HTTPS URI without query or fragment.'
+}
+if ($RedirectUri.GetLeftPart([UriPartial]::Authority) -ne $Issuer.GetLeftPart([UriPartial]::Authority) -or
+    $RedirectUri.AbsolutePath -ne ($Issuer.AbsolutePath.TrimEnd('/') + '/oidc-browser-test/callback')) {
+    throw 'The browser verifier requires a registered same-origin /oidc-browser-test/callback redirect URI.'
 }
 $cliCommand = Get-Command playwright-cli -ErrorAction SilentlyContinue
 if ($null -eq $cliCommand) {
@@ -39,7 +52,6 @@ $session = 'issuer-iis-' + [guid]::NewGuid().ToString('N')
 New-Item -ItemType Directory -Path $scratchRoot | Out-Null
 $configPath = Join-Path $scratchRoot 'cli.config.json'
 $codePath = Join-Path $scratchRoot 'browser-check.js'
-$resultFile = Join-Path $scratchRoot 'result.json'
 $templatePath = Join-Path $PSScriptRoot 'identity-issuer-browser-check.js'
 $issuerBase = $Issuer.AbsoluteUri.TrimEnd('/') + '/'
 $metadataUrl = [Uri]::new([Uri]$issuerBase, '.well-known/openid-configuration')
@@ -72,24 +84,32 @@ $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encod
 try {
     $openOutput = & $cliCommand.Source --config $configPath "-s=$session" open $metadataUrl.AbsoluteUri 2>&1
     if ($LASTEXITCODE -ne 0) {
-        $safeFailure = ($openOutput | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^(### Error|Error:|Browser)' } | ForEach-Object { $_ -replace 'https?://\S+', '<url>' }) -join ' '
-        throw "Playwright CLI could not launch Edge (exit $LASTEXITCODE). $safeFailure"
+        throw $runnerFailures.Open
     }
     $testOutput = & $cliCommand.Source "-s=$session" run-code "--filename=$codePath" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw 'Playwright CLI failed while evaluating the sanitized browser checks; no request, response, identity, or token details were printed.'
+        throw $runnerFailures.RunCode
     }
     $serialized = ($testOutput | ForEach-Object { [string]$_ }) -join "`n"
     $match = [regex]::Match($serialized, 'ISSUER_IIS_BROWSER_RESULT:(\{[^\r\n]+\})')
     if (-not $match.Success) {
-        throw 'Playwright completed without returning its sanitized result record.'
+        throw $runnerFailures.MissingResult
     }
     $resultJson = $match.Groups[1].Value -replace '\\"', '"'
     $result = $resultJson | ConvertFrom-Json
     $result | ConvertTo-Json -Depth 4
     if ($result.failure) {
-        throw "The sanitized browser check failed at '$($result.failure)'. Earlier completed check booleans are shown below."
+        exit 1
     }
+}
+catch {
+    $failure = if ($runnerFailures.Values -contains $_.Exception.Message) {
+        $_.Exception.Message
+    } else {
+        'browser_runner_runtime_error'
+    }
+    [pscustomobject]@{ failure = $failure } | ConvertTo-Json -Compress
+    exit 1
 }
 finally {
     & $cliCommand.Source "-s=$session" close *> $null
@@ -99,3 +119,4 @@ finally {
         Remove-Item -LiteralPath $resolvedScratch -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+exit 0
