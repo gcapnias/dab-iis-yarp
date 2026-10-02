@@ -1,4 +1,4 @@
-Configuration-driven DAB proof (2026-10-02)
+Configuration-driven DAB proof (2026-10-03)
 Verifier: scripts/test-embedded-dab.ps1
 Build: succeeded on .NET 10 with 0 warnings and 0 errors.
 Fixture: disposable SQL database prepared and removed; generated database name omitted.
@@ -13,12 +13,28 @@ PASS configured PATCH operation updates the fixture row
 PASS PATCH persists the updated fixture quantity
 PASS configured PUT operation upserts the fixture row
 PASS PUT persists the upserted fixture values
+PASS If-Match PUT updates an existing fixture row (status 200, body {"value":[{"id":1,"name":"put-update-only","quantity":11}]})
+PASS If-Match PUT persists existing-row changes
+PASS If-Match PATCH updates an existing fixture row (status 200, body {"value":[{"id":2,"name":"fixture-two","quantity":22}]})
+PASS If-Match PATCH persists existing-row changes
+PASS If-Match PUT rejects a missing key (status 400, body {"error":"DAB request rejected."})
+PASS If-Match PUT does not insert a missing key (status 200, body {"value":[]})
+PASS If-Match PATCH rejects a missing key (status 400, body {"error":"DAB request rejected."})
+PASS If-Match PATCH does not insert a missing key (status 200, body {"value":[]})
+PASS If-Match PUT rejects entity tags (status 400, body {"error":"DAB request rejected."})
+PASS Invalid If-Match PUT does not mutate the fixture row
+PASS If-Match PATCH rejects multiple values (status 400, body {"error":"DAB request rejected."})
+PASS Invalid If-Match PATCH does not mutate the fixture row
+PASS PUT without If-Match retains upsert behavior for a missing key (status 201, body {"value":[{"id":5,"name":"put-upsert-created","quantity":5}]})
+PASS Default PUT upsert inserts a missing fixture key
+PASS PATCH without If-Match retains upsert behavior for a missing key (status 201, body {"value":[{"id":6,"name":"patch-upsert-created","quantity":6}]})
+PASS Default PATCH upsert inserts a missing fixture key
 PASS configured delete operation removes the fixture row
 PASS DELETE removes the fixture row from subsequent reads (status 200, body {"value":[]})
 PASS per-entity REST permissions reject unconfigured create (status 403, body {"error":"DAB request rejected."})
 PASS configured GraphQL query HTTP 200
 PASS configured GraphQL query is served by the host process
-PASS configured GraphQL query has no GraphQL errors (body {"data":{"widgets":{"items":[{"id":1,"name":"fixture-one","quantity":3},{"id":2,"name":"fixture-two","quantity":7}]}}})
+PASS configured GraphQL query has no GraphQL errors (body {"data":{"widgets":{"items":[{"id":1,"name":"put-update-only","quantity":11},{"id":2,"name":"fixture-two","quantity":22}]}}})
 PASS GraphQL query reads fixture rows
 PASS configured GraphQL mutation HTTP 200
 PASS configured GraphQL mutation is served by the host process
@@ -37,7 +53,7 @@ PASS GraphQL schema rejects the specific permission-denied create field
 PASS initial configuration exposes RetiredWidget through REST
 PASS REST rejects paths that only share the configured path prefix
 PASS initial configuration does not expose Label
-PASS configuration-only path change exposes the same Widget entity at its new route (status 200, body {"value":[{"id":1,"name":"fixture-one","quantity":3},{"id":2,"name":"fixture-two","quantity":7}]})
+PASS configuration-only path change exposes the same Widget entity at its new route (status 200, body {"value":[{"id":1,"name":"put-update-only","quantity":11},{"id":2,"name":"fixture-two","quantity":22}],"nextLink":"http://127.0.0.1:62381/v2/catalog/widgets?$first=2&$after=W3siRW50aXR5TmFtZSI6IldpZGdldCIsIkZpZWxkTmFtZSI6ImlkIiwiRmllbGRWYWx1ZSI6MiwiRGlyZWN0aW9uIjowfV0="})
 PASS expanded REST adapter is served by the restarted host process
 PASS previous REST base path is inactive after restart
 PASS expanded REST path rejects prefix collisions without a segment boundary
@@ -49,4 +65,4 @@ PASS expanded GraphQL schema query has no GraphQL errors (body {"data":{"labels"
 PASS new GraphQL entity is queryable after restart
 PASS GraphQL schema reports the removed entity field as unknown after restart
 PASS configuration changes were applied by restarting the same built binary
-PASS total checks: 46
+PASS total checks: 62

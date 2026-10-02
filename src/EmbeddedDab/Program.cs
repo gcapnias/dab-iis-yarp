@@ -136,6 +136,26 @@ app.MapMethods("/{**dabRoute}", ["GET", "POST", "PUT", "PATCH", "DELETE"], async
             _ => throw new InvalidOperationException("Unsupported HTTP method.")
         };
 
+        if ((operation is EntityActionOperation.Upsert or EntityActionOperation.UpsertIncremental)
+            && context.Request.Headers.ContainsKey("If-Match"))
+        {
+            // Match RestController.DeterminePatchPutSemantics in DAB Core's pinned 2.0.12 service.
+            if (!string.Equals(context.Request.Headers["If-Match"].ToString(), "*", StringComparison.Ordinal))
+            {
+                throw new DataApiBuilderException(
+                    message: "Etags not supported, use '*'",
+                    statusCode: System.Net.HttpStatusCode.BadRequest,
+                    subStatusCode: DataApiBuilderException.SubStatusCodes.BadRequest);
+            }
+
+            operation = operation switch
+            {
+                EntityActionOperation.Upsert => EntityActionOperation.Update,
+                EntityActionOperation.UpsertIncremental => EntityActionOperation.UpdateIncremental,
+                _ => operation
+            };
+        }
+
         IActionResult? result = await restService.ExecuteAsync(entityName, operation, primaryKeyRoute);
         if (result is null)
         {
@@ -209,6 +229,14 @@ static void LoadNorthwindConnectionFromEnvFile()
     throw new InvalidOperationException("DAB_ENV_FILE has no SQL Server connection for the Northwind baseline.");
 }
 
+static async Task DropFixtureDatabaseAsync(SqlConnection masterConnection, string databaseName)
+{
+    await using var drop = new SqlCommand(
+        $"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{databaseName}]",
+        masterConnection);
+    await drop.ExecuteNonQueryAsync();
+}
+
 static async Task ManageFixtureDatabaseAsync(string operation, string databaseName)
 {
     if (!databaseName.StartsWith(FixturePrefix, StringComparison.Ordinal)
@@ -236,20 +264,27 @@ static async Task ManageFixtureDatabaseAsync(string operation, string databaseNa
             await using var fixture = new SqlConnection(northwind.ConnectionString);
             await fixture.OpenAsync();
             const string seed = """
-                CREATE TABLE dbo.Widgets (id int IDENTITY(1,1) NOT NULL PRIMARY KEY, name nvarchar(80) NOT NULL, quantity int NOT NULL);
+                CREATE TABLE dbo.Widgets (id int NOT NULL PRIMARY KEY, name nvarchar(80) NOT NULL, quantity int NOT NULL);
                 CREATE TABLE dbo.RetiredWidgets (id int IDENTITY(1,1) NOT NULL PRIMARY KEY, name nvarchar(80) NOT NULL);
                 CREATE TABLE dbo.Labels (id int IDENTITY(1,1) NOT NULL PRIMARY KEY, name nvarchar(80) NOT NULL);
-                INSERT dbo.Widgets (name, quantity) VALUES (N'fixture-one', 3), (N'fixture-two', 7);
+                INSERT dbo.Widgets (id, name, quantity) VALUES (1, N'fixture-one', 3), (2, N'fixture-two', 7);
                 INSERT dbo.RetiredWidgets (name) VALUES (N'removed-by-config');
                 INSERT dbo.Labels (name) VALUES (N'added-by-config');
                 """;
             await using var seedCommand = new SqlCommand(seed, fixture);
             await seedCommand.ExecuteNonQueryAsync();
         }
-        catch
+        catch (Exception setupFailure)
         {
-            await using var removePartialFixture = new SqlCommand($"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{databaseName}]", connection);
-            await removePartialFixture.ExecuteNonQueryAsync();
+            try
+            {
+                await DropFixtureDatabaseAsync(connection, databaseName);
+            }
+            catch (Exception cleanupFailure)
+            {
+                throw new AggregateException("Disposable fixture setup and cleanup both failed.", setupFailure, cleanupFailure);
+            }
+
             throw;
         }
 
@@ -257,10 +292,6 @@ static async Task ManageFixtureDatabaseAsync(string operation, string databaseNa
         return;
     }
 
-    await using (var drop = new SqlCommand($"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{databaseName}]", connection))
-    {
-        await drop.ExecuteNonQueryAsync();
-    }
-
+    await DropFixtureDatabaseAsync(connection, databaseName);
     Console.WriteLine($"Disposable fixture removed: {databaseName}.");
 }

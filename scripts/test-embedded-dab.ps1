@@ -39,14 +39,26 @@ function Assert-True([bool]$condition, [string]$message) {
     Write-Host "PASS $message"
 }
 
-function Get-Response([string]$method, [string]$path, [string]$role = 'anonymous', [string]$json = '') {
+function Get-Response([string]$method, [string]$path, [string]$role = 'anonymous', [string]$json = '', [hashtable]$extraHeaders = @{}) {
     $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::new($method), "$baseUri$path")
     if ($role) { $request.Headers.Add('X-MS-API-ROLE', $role) }
+    foreach ($headerName in $extraHeaders.Keys) {
+        $headerValues = [string[]]@($extraHeaders[$headerName])
+        if (-not $request.Headers.TryAddWithoutValidation($headerName, $headerValues)) {
+            throw "Could not add request header $headerName."
+        }
+    }
     if ($json) { $request.Content = [System.Net.Http.StringContent]::new($json, [System.Text.Encoding]::UTF8, 'application/json') }
     $response = $http.Send($request)
     $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
     $responseProcessId = $response.Headers.GetValues('X-Spike-Process-Id') -join ''
     return [pscustomobject]@{ Status = [int]$response.StatusCode; Body = $body; ProcessId = $responseProcessId }
+}
+
+function Assert-DeletedRow($response, [string]$description) {
+    $rows = if ($response.Status -eq 200) { @((($response.Body | ConvertFrom-Json).value)) } else { @() }
+    $isAbsent = $response.Status -eq 404 -or ($response.Status -eq 200 -and $rows.Count -eq 0)
+    Assert-True $isAbsent "$description (status $($response.Status), body $($response.Body))"
 }
 
 function Wait-ForServer {
@@ -115,7 +127,7 @@ try {
     Assert-True ($items.ProcessId -eq $processId) 'REST adapter is served by the same process as the host route'
     $rows = ($items.Body | ConvertFrom-Json).value
     Assert-True ($rows.Count -eq 2 -and $rows[0].name -eq 'fixture-one') 'REST response comes from the disposable fixture'
-    $created = Get-Response 'POST' '/api/Widget' 'anonymous' '{"name":"rest-created","quantity":1}'
+    $created = Get-Response 'POST' '/api/Widget' 'anonymous' '{"id":3,"name":"rest-created","quantity":1}'
     Assert-True ($created.Status -in @(200, 201)) "configured create operation accepts a disposable fixture write (status $($created.Status), body $($created.Body))"
     $detail = Get-Response 'GET' '/api/Widget/id/3'
     Assert-True ($detail.Status -eq 200) 'configured key route reads the created row'
@@ -128,26 +140,58 @@ try {
     $afterPut = Get-Response 'GET' '/api/Widget/id/3'
     $putRow = ($afterPut.Body | ConvertFrom-Json).value[0]
     Assert-True ($putRow.name -eq 'rest-upserted' -and $putRow.quantity -eq 4) 'PUT persists the upserted fixture values'
+
+    $putIfMatch = Get-Response 'PUT' '/api/Widget/id/1' 'anonymous' '{"name":"put-update-only","quantity":11}' @{ 'If-Match' = '*' }
+    Assert-True ($putIfMatch.Status -in @(200, 204)) "If-Match PUT updates an existing fixture row (status $($putIfMatch.Status), body $($putIfMatch.Body))"
+    $afterPutIfMatch = (Get-Response 'GET' '/api/Widget/id/1').Body | ConvertFrom-Json
+    Assert-True ($afterPutIfMatch.value[0].name -eq 'put-update-only' -and $afterPutIfMatch.value[0].quantity -eq 11) 'If-Match PUT persists existing-row changes'
+
+    $patchIfMatch = Get-Response 'PATCH' '/api/Widget/id/2' 'anonymous' '{"quantity":22}' @{ 'If-Match' = '*' }
+    Assert-True ($patchIfMatch.Status -in @(200, 204)) "If-Match PATCH updates an existing fixture row (status $($patchIfMatch.Status), body $($patchIfMatch.Body))"
+    $afterPatchIfMatch = (Get-Response 'GET' '/api/Widget/id/2').Body | ConvertFrom-Json
+    Assert-True ($afterPatchIfMatch.value[0].quantity -eq 22) 'If-Match PATCH persists existing-row changes'
+
+    $missingPutIfMatch = Get-Response 'PUT' '/api/Widget/id/7' 'anonymous' '{"id":7,"name":"must-not-insert-put","quantity":7}' @{ 'If-Match' = '*' }
+    Assert-True ($missingPutIfMatch.Status -eq 400) "If-Match PUT rejects a missing key (status $($missingPutIfMatch.Status), body $($missingPutIfMatch.Body))"
+    Assert-DeletedRow (Get-Response 'GET' '/api/Widget/id/7') 'If-Match PUT does not insert a missing key'
+    $missingPatchIfMatch = Get-Response 'PATCH' '/api/Widget/id/8' 'anonymous' '{"id":8,"name":"must-not-insert-patch","quantity":8}' @{ 'If-Match' = '*' }
+    Assert-True ($missingPatchIfMatch.Status -eq 400) "If-Match PATCH rejects a missing key (status $($missingPatchIfMatch.Status), body $($missingPatchIfMatch.Body))"
+    Assert-DeletedRow (Get-Response 'GET' '/api/Widget/id/8') 'If-Match PATCH does not insert a missing key'
+
+    $invalidPutIfMatch = Get-Response 'PUT' '/api/Widget/id/1' 'anonymous' '{"id":1,"name":"invalid-put-mutated","quantity":99}' @{ 'If-Match' = '"unsupported-etag"' }
+    Assert-True ($invalidPutIfMatch.Status -eq 400) "If-Match PUT rejects entity tags (status $($invalidPutIfMatch.Status), body $($invalidPutIfMatch.Body))"
+    $afterInvalidPutIfMatch = (Get-Response 'GET' '/api/Widget/id/1').Body | ConvertFrom-Json
+    Assert-True ($afterInvalidPutIfMatch.value[0].name -eq 'put-update-only' -and $afterInvalidPutIfMatch.value[0].quantity -eq 11) 'Invalid If-Match PUT does not mutate the fixture row'
+    $invalidPatchIfMatch = Get-Response 'PATCH' '/api/Widget/id/2' 'anonymous' '{"quantity":99}' @{ 'If-Match' = @('*', '"unsupported-etag"') }
+    Assert-True ($invalidPatchIfMatch.Status -eq 400) "If-Match PATCH rejects multiple values (status $($invalidPatchIfMatch.Status), body $($invalidPatchIfMatch.Body))"
+    $afterInvalidPatchIfMatch = (Get-Response 'GET' '/api/Widget/id/2').Body | ConvertFrom-Json
+    Assert-True ($afterInvalidPatchIfMatch.value[0].quantity -eq 22) 'Invalid If-Match PATCH does not mutate the fixture row'
+
+    $putDefaultInsert = Get-Response 'PUT' '/api/Widget/id/5' 'anonymous' '{"name":"put-upsert-created","quantity":5}'
+    Assert-True ($putDefaultInsert.Status -in @(200, 201, 204)) "PUT without If-Match retains upsert behavior for a missing key (status $($putDefaultInsert.Status), body $($putDefaultInsert.Body))"
+    $putDefaultInsertRow = (Get-Response 'GET' '/api/Widget/id/5').Body | ConvertFrom-Json
+    Assert-True ($putDefaultInsertRow.value[0].name -eq 'put-upsert-created') 'Default PUT upsert inserts a missing fixture key'
+    $patchDefaultInsert = Get-Response 'PATCH' '/api/Widget/id/6' 'anonymous' '{"name":"patch-upsert-created","quantity":6}'
+    Assert-True ($patchDefaultInsert.Status -in @(200, 201, 204)) "PATCH without If-Match retains upsert behavior for a missing key (status $($patchDefaultInsert.Status), body $($patchDefaultInsert.Body))"
+    $patchDefaultInsertRow = (Get-Response 'GET' '/api/Widget/id/6').Body | ConvertFrom-Json
+    Assert-True ($patchDefaultInsertRow.value[0].name -eq 'patch-upsert-created') 'Default PATCH upsert inserts a missing fixture key'
+
     $deleted = Get-Response 'DELETE' '/api/Widget/id/3'
     Assert-True ($deleted.Status -in @(200, 204)) 'configured delete operation removes the fixture row'
     $afterDelete = Get-Response 'GET' '/api/Widget/id/3'
-    $deleteReadRows = if ($afterDelete.Status -eq 200) { ($afterDelete.Body | ConvertFrom-Json).value } else { @() }
-    $deleteReadIsEmpty = $afterDelete.Status -eq 404 -or ($afterDelete.Status -eq 200 -and $deleteReadRows.Count -eq 0)
-    Assert-True $deleteReadIsEmpty "DELETE removes the fixture row from subsequent reads (status $($afterDelete.Status), body $($afterDelete.Body))"
+    Assert-DeletedRow $afterDelete 'DELETE removes the fixture row from subsequent reads'
     $denied = Get-Response 'POST' '/api/RetiredWidget' 'anonymous' '{"name":"denied"}'
     Assert-True ($denied.Status -in @(401, 403)) "per-entity REST permissions reject unconfigured create (status $($denied.Status), body $($denied.Body))"
     $gql = Assert-GraphQL '/graphql' '{ widgets(first: 2) { items { id name quantity } } }' 'anonymous' 'configured GraphQL query'
     Assert-True ($gql.data.widgets.items.Count -ge 2) 'GraphQL query reads fixture rows'
-    $createWidget = Assert-GraphQL '/graphql' 'mutation { createWidget(item: { name: "graphql-created", quantity: 6 }) { id name quantity } }' 'anonymous' 'configured GraphQL mutation'
+    $createWidget = Assert-GraphQL '/graphql' 'mutation { createWidget(item: { id: 4, name: "graphql-created", quantity: 6 }) { id name quantity } }' 'anonymous' 'configured GraphQL mutation'
     Assert-True ($createWidget.data.createWidget.name -eq 'graphql-created') 'GraphQL mutation writes the disposable fixture'
     $updateWidget = Assert-GraphQL '/graphql' 'mutation { updateWidget(id: 4, item: { quantity: 9 }) { id name quantity } }' 'anonymous' 'configured GraphQL update mutation'
     Assert-True ($updateWidget.data.updateWidget.quantity -eq 9) 'GraphQL update mutation changes the fixture row'
     $deleteWidget = Assert-GraphQL '/graphql' 'mutation { deleteWidget(id: 4) { id } }' 'anonymous' 'configured GraphQL delete mutation'
     Assert-True ($deleteWidget.data.deleteWidget.id -eq 4) 'GraphQL delete mutation returns the deleted fixture key'
     $afterGraphQLDelete = Get-Response 'GET' '/api/Widget/id/4'
-    $graphQLDeleteReadRows = if ($afterGraphQLDelete.Status -eq 200) { ($afterGraphQLDelete.Body | ConvertFrom-Json).value } else { @() }
-    $graphQLDeleteReadIsEmpty = $afterGraphQLDelete.Status -eq 404 -or ($afterGraphQLDelete.Status -eq 200 -and $graphQLDeleteReadRows.Count -eq 0)
-    Assert-True $graphQLDeleteReadIsEmpty "GraphQL delete mutation removes the fixture row (status $($afterGraphQLDelete.Status), body $($afterGraphQLDelete.Body))"
+    Assert-DeletedRow $afterGraphQLDelete 'GraphQL delete mutation removes the fixture row'
     $retiredMutation = Get-Response 'POST' '/graphql' 'anonymous' ('{"query":"mutation { createRetiredWidget(item: { name: \"denied\" }) { id } }"}')
     $retiredMutationErrors = (($retiredMutation.Body | ConvertFrom-Json).errors | ForEach-Object { $_.message }) -join ' '
     Assert-True ($retiredMutationErrors -match 'createRetiredWidget' -and $retiredMutationErrors -match 'does not exist') 'GraphQL schema rejects the specific permission-denied create field'
