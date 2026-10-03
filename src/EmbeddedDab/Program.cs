@@ -17,6 +17,10 @@ using HotChocolate.AspNetCore;
 using EmbeddedDab;
 using Azure.DataApiBuilder.Service.Exceptions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Azure.DataApiBuilder.Service;
+using Azure.DataApiBuilder.Core.AuthenticationHelpers.AuthenticationSimulator;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Routing;
@@ -38,17 +42,35 @@ builder.Logging.ClearProviders();
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAuthorization();
-builder.Services.AddAuthentication().AddUnauthenticatedAuthentication();
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = "dab_bridge_csrf";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.Path = "/";
+});
 builder.Services.AddSingleton<IFileSystem, FileSystem>();
 builder.Services.AddSingleton<HotReloadEventHandler<HotReloadEventArgs>>();
+string dabConfigPath = Environment.GetEnvironmentVariable("DAB_CONFIG_FILE") is { Length: > 0 } configOverride
+    ? Path.GetFullPath(configOverride)
+    : Path.Combine(builder.Environment.ContentRootPath, "dab-config.json");
 builder.Services.AddSingleton<RuntimeConfigLoader>(services => new FileSystemRuntimeConfigLoader(
     services.GetRequiredService<IFileSystem>(),
     services.GetRequiredService<HotReloadEventHandler<HotReloadEventArgs>>(),
-    Path.Combine(builder.Environment.ContentRootPath, "dab-config.json"),
+    dabConfigPath,
     Environment.GetEnvironmentVariable("DAB_CONNECTION_STRING"),
     false,
     services.GetRequiredService<ILogger<FileSystemRuntimeConfigLoader>>()));
 builder.Services.AddSingleton<RuntimeConfigProvider>();
+builder.Services.AddSingleton<IConfigureOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
+builder.Services.AddAuthentication()
+    .AddEnvDetectedEasyAuth()
+    .AddJwtBearer(GenericOAuthDefaults.AUTHENTICATIONSCHEME)
+    .AddJwtBearer()
+    .AddSimulatorAuthentication()
+    .AddUnauthenticatedAuthentication();
 builder.Services.AddSingleton<RuntimeConfigValidator>();
 builder.Services.AddSingleton<IQueryEngineFactory, QueryEngineFactory>();
 builder.Services.AddSingleton<IMutationEngineFactory, MutationEngineFactory>();
@@ -79,8 +101,10 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Spike-Process-Id"] = Environment.ProcessId.ToString();
     await next(context);
 });
+app.UseMiddleware<IssuerCookieBearerBridgeMiddleware>();
 app.UseAuthentication();
 app.UseClientRoleHeaderAuthenticationMiddleware();
+app.UseMiddleware<IssuerCookieAntiforgeryMiddleware>();
 app.UseAuthorization();
 app.UseClientRoleHeaderAuthorizationMiddleware();
 app.MapGet("/host", () => new
@@ -89,8 +113,15 @@ app.MapGet("/host", () => new
     processId = Environment.ProcessId,
     framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
 });
+app.MapGet("/bridge/csrf", (HttpContext context, Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    var tokens = antiforgery.GetAndStoreTokens(context);
+    return Results.Json(new { requestToken = tokens.RequestToken });
+});
 
-if (appArgs.Contains("--initialize"))
+if (appArgs.Contains("--initialize")
+    || string.Equals(Environment.GetEnvironmentVariable("DAB_INITIALIZE"), "true", StringComparison.OrdinalIgnoreCase))
 {
     var runtimeConfigProvider = app.Services.GetRequiredService<RuntimeConfigProvider>();
     _ = runtimeConfigProvider.GetConfig();
@@ -295,3 +326,5 @@ static async Task ManageFixtureDatabaseAsync(string operation, string databaseNa
     await DropFixtureDatabaseAsync(connection, databaseName);
     Console.WriteLine($"Disposable fixture removed: {databaseName}.");
 }
+
+public partial class Program;
