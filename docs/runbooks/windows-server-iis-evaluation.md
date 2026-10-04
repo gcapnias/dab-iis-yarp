@@ -1,5 +1,7 @@
 # Deploy and evaluate the issuer and embedded DAB under IIS
 
+For a new empty server, follow the complete [Windows Server 2025 installation guide](windows-server-2025-clean-install.md). It includes prerequisite installation, fresh credentials/keys/database creation, exact IIS and ACL commands, complete configuration and workstation acceptance tests. The material below describes the evaluated deployment and its retained state.
+
 This is the test-server deployment for [Evaluate the completed issuer and embedded DAB on Windows Server IIS](https://github.com/gcapnias/dab-iis-yarp/issues/12). The user authorized server preparation, missing components, runtimes, deployment under the Default Web Site, and tests from the development workstation. Installation on the workstation is not part of this procedure.
 
 ## Evaluated topology
