@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Subagent Supervision and Reporting
+
+Remain responsible for every agent you spawn. Monitor delegated work using the available coordination tools, and proactively relay results, blockers, and questions requiring user input to the main conversation. Do not wait for the user to request updates or end your turn merely because work has been delegated. Honor any requested confirmation checkpoint before proceeding with dependent work.
+
 ## Agent skills
 
 ### Issue tracker
