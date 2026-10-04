@@ -4,6 +4,8 @@ Validated on 2026-10-03 with `Microsoft.DataApiBuilder.Core` 2.0.12 and .NET 10 
 
 ## Current application baseline
 
+The external Windows Server 2025 deployment and IIS-specific configuration/ACL requirements are in the [server runbook](windows-server-iis-evaluation.md). The [evaluation report](../../archive/research/windows-server-iis/EVALUATION.md) records the passing isolated IIS mutation proof and final Northwind REST/GraphQL browser/token proof. The deployed host can use its protected DAB connection configuration directly; the optional environment-file loader is retained for local fixtures.
+
 The accepted [framework and package decision](../adr/0002-net10-and-proven-dab-core-baseline.md) selects `net10.0` with Core `2.0.12` for new application work, retaining the four supplemental dependency pins below. The archived .NET 8 instructions reproduce the original package-target proof; they are not the target recommendation for the new application.
 
 The [integration decision](../adr/0001-conditional-same-process-dab-integration.md) accepts application-owned bootstrap, HTTP adapters, dependency pins, and upgrade validation. The configuration-driven proof now passes for REST CRUD/key routes, GraphQL queries and mutations, operation permissions, conditional PUT/PATCH semantics, and entity/path changes after restarting an unchanged binary. The fixed Products adapter below remains the original narrow baseline and does not by itself establish that broader result.
