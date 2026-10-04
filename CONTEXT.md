@@ -12,12 +12,16 @@ _Avoid_: Products-only integration, fixed-endpoint integration
 The access rule declared for a DAB resource, operation and role. An issuer role carried in a credential grants resource access only when the DAB application's validated caller and configured permission agree.
 _Avoid_: Issuer login permission, automatic role access
 
+**Requested resource role**:
+The issuer role selected for an API request. Selection is valid only when the validated access credential contains that role; it does not create a role grant or override configured resource permissions.
+_Avoid_: Client-granted role, role-header permission
+
 **Local API proof**:
 Evidence for configuration-driven REST and GraphQL behavior in the embedded application, using isolated data and explicitly identified permissions. It is separate from issuer interoperability and server environment evaluation.
 _Avoid_: Complete security proof, production readiness
 
 **Issuer interoperability proof**:
-Evidence that issuer credentials reach the embedded application and the real DAB engine validates the caller and enforces configured resource permissions through REST and GraphQL. Controlled credential tests and the real Windows caller-to-issuer-account chain are distinct parts of this proof.
+Evidence that the real Windows caller-to-persisted-issuer-account-to-browser-credential chain reaches the embedded application, where DAB validates the caller and enforces configured REST and GraphQL permissions. Controlled invalid-credential tests complement this live proof; neither part substitutes for server environment evaluation.
 _Avoid_: Issuer-only proof, anonymous API proof
 
 **Identity issuer**:
@@ -41,7 +45,7 @@ An operator-assigned role persisted for an issuer account and carried in its acc
 _Avoid_: AD group, operating-system permission
 
 **Cookie session**:
-The browser's issuer-managed access and refresh credentials, separate from the browser's cached Windows Authentication state.
+The browser's issuer-managed access and refresh credentials, separate from the browser's cached Windows Authentication state. Ending that session removes browser credentials and revokes refresh access, but does not invalidate a copied access credential before its expiry.
 _Avoid_: Windows logon session
 
 **Refresh family**:
@@ -49,8 +53,16 @@ The lineage of rotating refresh credentials for one session or authorization. Re
 _Avoid_: Independent reusable refresh token
 
 **Embedded-host cookie bridge**:
-The DAB application's boundary that consumes the issuer's browser credential and supplies a validated token to the DAB engine. Its compatibility and resource permissions are proved separately from issuer behavior.
+The DAB application's boundary that adapts the issuer's browser credential for validation by the DAB engine. Transport adaptation does not authenticate the caller or grant resource permissions on its own.
 _Avoid_: Issuer-hosted DAB, automatic DAB cookie support
+
+**Browser API origin**:
+The origin from which the browser makes requests to the embedded application's API. A cookie eligible for that API does not itself grant cross-origin access or permission to change resources.
+_Avoid_: Shared-cookie authorization, issuer origin
+
+**Cookie mutation protection**:
+The embedded application's requirement that a state-changing cookie request comes from its API origin and carries an antiforgery credential bound to the authenticated caller. A valid access credential alone does not satisfy that requirement.
+_Avoid_: JWT-only CSRF protection, anonymous antiforgery validation
 
 **Local issuer proof**:
 Evidence for the Windows caller-to-persisted-account-to-token/cookie chain on the development machine, with fixture and real-service results identified separately.
