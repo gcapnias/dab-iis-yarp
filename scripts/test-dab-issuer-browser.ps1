@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory)][uri]$Issuer,
     [Parameter(Mandatory)][uri]$Api,
+    [string]$CredentialFile,
+    [switch]$Northwind,
     [switch]$ValidateServerCertificate
 )
 
@@ -15,13 +17,12 @@ trap {
     exit 1
 }
 foreach ($endpoint in @($Issuer, $Api)) {
-    if ($endpoint.Scheme -ne 'https' -or $endpoint.DnsSafeHost -ne 'localhost' -or
-        $endpoint.AbsolutePath -ne '/' -or $endpoint.Query -or $endpoint.Fragment -or $endpoint.UserInfo) {
-        throw 'This local proof requires HTTPS localhost root origins without query, fragment or user information.'
+    if ($endpoint.Scheme -ne 'https' -or $endpoint.Query -or $endpoint.Fragment -or $endpoint.UserInfo) {
+        throw 'The proof requires HTTPS application URLs without query, fragment or user information.'
     }
 }
-if ($Issuer.Port -eq $Api.Port) {
-    throw 'Issuer and embedded API must use separate local listener ports.'
+if ($Issuer.DnsSafeHost -ne $Api.DnsSafeHost -or $Issuer.AbsoluteUri.TrimEnd('/') -eq $Api.AbsoluteUri.TrimEnd('/')) {
+    throw 'Issuer and embedded API must be distinct applications on the same cookie hostname.'
 }
 $cliCommand = Get-Command playwright-cli -ErrorAction SilentlyContinue
 if ($null -eq $cliCommand) {
@@ -46,7 +47,7 @@ $session = 'issuer-dab-' + [guid]::NewGuid().ToString('N')
 New-Item -ItemType Directory -Path $scratchRoot | Out-Null
 $configPath = Join-Path $scratchRoot 'cli.config.json'
 $codePath = Join-Path $scratchRoot 'browser-check.js'
-$templatePath = Join-Path $PSScriptRoot 'dab-issuer-browser-check.js'
+$templatePath = Join-Path $PSScriptRoot $(if ($Northwind) { 'dab-northwind-browser-check.js' } else { 'dab-issuer-browser-check.js' })
 $issuerBase = $Issuer.AbsoluteUri.TrimEnd('/') + '/'
 $metadataUrl = [Uri]::new([Uri]$issuerBase, '.well-known/openid-configuration')
 $browserOptions = [ordered]@{
@@ -65,6 +66,14 @@ $config.browser.launchOptions = @{
     args = @('--auth-server-allowlist=' + $Issuer.DnsSafeHost)
 }
 $config.browser.contextOptions.ignoreHTTPSErrors = -not [bool]$ValidateServerCertificate
+if ($CredentialFile) {
+    $browserCredential = Import-Clixml -LiteralPath $CredentialFile
+    $config.browser.contextOptions.httpCredentials = @{
+        username = $browserCredential.UserName
+        password = $browserCredential.GetNetworkCredential().Password
+        origin = $Issuer.GetLeftPart([UriPartial]::Authority)
+    }
+}
 $config.outputMode = 'stdout'
 $config.outputDir = $scratchRoot
 $config.timeouts = @{ action = 15000; navigation = 60000 }

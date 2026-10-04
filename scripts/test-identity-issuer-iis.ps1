@@ -6,6 +6,7 @@ param(
     [string]$AccessCookieName = 'dab_access_token',
     [string]$RefreshCookieName = 'issuer_refresh_token',
     [string]$CookieDomain,
+    [string]$CredentialFile,
     [switch]$ValidateServerCertificate
 )
 
@@ -76,6 +77,14 @@ $config.browser.launchOptions = @{
     args = @('--auth-server-allowlist=' + $Issuer.DnsSafeHost)
 }
 $config.browser.contextOptions.ignoreHTTPSErrors = -not [bool]$ValidateServerCertificate
+if ($CredentialFile) {
+    $browserCredential = Import-Clixml -LiteralPath $CredentialFile
+    $config.browser.contextOptions.httpCredentials = @{
+        username = $browserCredential.UserName
+        password = $browserCredential.GetNetworkCredential().Password
+        origin = $Issuer.GetLeftPart([UriPartial]::Authority)
+    }
+}
 $config.outputMode = 'stdout'
 $config.outputDir = $scratchRoot
 $config.timeouts = @{ action = 15000; navigation = 60000 }

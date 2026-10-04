@@ -29,7 +29,13 @@ using ZiggyCreatures.Caching.Fusion;
 
 const string FixturePrefix = "dab_ticket9_";
 string[] appArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
-LoadNorthwindConnectionFromEnvFile();
+// The deployed host may use a connection in its DAB configuration. Only the
+// local fixture workflow needs the ignored Northwind environment-file loader.
+if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DAB_ENV_FILE"))
+    || appArgs.Length == 2 && appArgs[0] is "--prepare-fixture" or "--cleanup-fixture")
+{
+    LoadNorthwindConnectionFromEnvFile();
+}
 
 if (appArgs.Length == 2 && appArgs[0] is "--prepare-fixture" or "--cleanup-fixture")
 {
@@ -155,7 +161,9 @@ app.MapMethods("/{**dabRoute}", ["GET", "POST", "PUT", "PATCH", "DELETE"], async
 
     try
     {
-        string route = string.Concat(context.Request.PathBase, context.Request.Path).TrimStart('/');
+        // IIS has already removed the application prefix into PathBase. DAB's
+        // parser expects the configured REST path, relative to this application.
+        string route = context.Request.Path.Value!.TrimStart('/');
         string routeAfterPathBase = restService.GetRouteAfterPathBase(route);
         (string entityName, string primaryKeyRoute) = restService.GetEntityNameAndPrimaryKeyRouteFromRoute(routeAfterPathBase);
         EntityActionOperation operation = context.Request.Method.ToUpperInvariant() switch

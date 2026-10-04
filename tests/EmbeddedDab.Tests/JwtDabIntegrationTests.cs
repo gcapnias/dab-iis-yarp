@@ -201,7 +201,43 @@ public sealed class JwtDabIntegrationTests
         });
     }
 
-    private static async Task WithDabHostAsync(Func<HttpClient, RSA, string, Task> run)
+    [Fact]
+    public async Task IisApplicationPrefixIsExcludedFromDabRestParsing()
+    {
+        await WithDabHostAsync(async (client, signingKey, issuerUrl) =>
+        {
+            string token = CreateToken(CreateIssuer(signingKey, issuerUrl), ["reader"]);
+            using var rest = await SendAsync(client, HttpMethod.Get, "/dab/api/Widget/id/1", token, "reader");
+            Assert.Equal(HttpStatusCode.OK, rest.StatusCode);
+            using var body = JsonDocument.Parse(await rest.Content.ReadAsStringAsync());
+            Assert.Equal("fixture-one", body.RootElement.GetProperty("value")[0].GetProperty("name").GetString());
+            using var page = await SendAsync(client, HttpMethod.Get, "/dab/api/Widget?$first=1", token, "reader");
+            Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            using var pageBody = JsonDocument.Parse(await page.Content.ReadAsStringAsync());
+            string nextLink = pageBody.RootElement.GetProperty("nextLink").GetString()!;
+            Assert.Equal("/dab/api/Widget", new Uri(nextLink).AbsolutePath);
+            using var nextPage = await SendAsync(client, HttpMethod.Get, nextLink, token, "reader");
+            Assert.Equal(HttpStatusCode.OK, nextPage.StatusCode);
+            using var nextBody = JsonDocument.Parse(await nextPage.Content.ReadAsStringAsync());
+            Assert.Equal(2, nextBody.RootElement.GetProperty("value")[0].GetProperty("id").GetInt32());
+            using var graph = await SendAsync(client, HttpMethod.Get,
+                "/dab/graphql?query=" + Uri.EscapeDataString("{ widgets { items { id name } } }"), token, "reader");
+            Assert.Equal(HttpStatusCode.OK, graph.StatusCode);
+            using var graphBody = JsonDocument.Parse(await graph.Content.ReadAsStringAsync());
+            Assert.False(graphBody.RootElement.TryGetProperty("errors", out _));
+        }, "/dab");
+    }
+
+    private sealed class ApplicationPathFilter(string pathBase) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.UsePathBase(pathBase);
+            next(app);
+        };
+    }
+
+    private static async Task WithDabHostAsync(Func<HttpClient, RSA, string, Task> run, string? pathBase = null)
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DAB_ENV_FILE"))
             || string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DAB_FIXTURE_DATABASE")))
@@ -215,8 +251,18 @@ public sealed class JwtDabIntegrationTests
         string? originalIssuer = Environment.GetEnvironmentVariable("DAB_TEST_ISSUER");
         string? originalConfig = Environment.GetEnvironmentVariable("DAB_CONFIG_FILE");
         string? originalInitialize = Environment.GetEnvironmentVariable("DAB_INITIALIZE");
+        string configPath = Path.Combine(AppContext.BaseDirectory, "configurations", "jwt-interoperability.json");
+        string? temporaryConfig = null;
+        if (pathBase is not null)
+        {
+            var config = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(configPath))!;
+            config["runtime"]!["base-route"] = pathBase;
+            temporaryConfig = Path.GetTempFileName();
+            File.WriteAllText(temporaryConfig, config.ToJsonString());
+            configPath = temporaryConfig;
+        }
         Environment.SetEnvironmentVariable("DAB_TEST_ISSUER", issuerUrl);
-        Environment.SetEnvironmentVariable("DAB_CONFIG_FILE", Path.Combine(AppContext.BaseDirectory, "configurations", "jwt-interoperability.json"));
+        Environment.SetEnvironmentVariable("DAB_CONFIG_FILE", configPath);
         Environment.SetEnvironmentVariable("DAB_INITIALIZE", "true");
 
         try
@@ -224,6 +270,8 @@ public sealed class JwtDabIntegrationTests
             using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
                 builder.ConfigureTestServices(services =>
                 {
+                    if (pathBase is not null)
+                        services.AddSingleton<IStartupFilter>(new ApplicationPathFilter(pathBase));
                     services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options => options.RequireHttpsMetadata = false);
                     services.Configure<JwtBearerOptions>(GenericOAuthDefaults.AUTHENTICATIONSCHEME, options => options.RequireHttpsMetadata = false);
                 }));
@@ -235,6 +283,8 @@ public sealed class JwtDabIntegrationTests
             Environment.SetEnvironmentVariable("DAB_TEST_ISSUER", originalIssuer);
             Environment.SetEnvironmentVariable("DAB_CONFIG_FILE", originalConfig);
             Environment.SetEnvironmentVariable("DAB_INITIALIZE", originalInitialize);
+            if (temporaryConfig is not null)
+                File.Delete(temporaryConfig);
         }
     }
 

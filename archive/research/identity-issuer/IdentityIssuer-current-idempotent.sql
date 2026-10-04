@@ -464,10 +464,10 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261002061343_OidcRefreshMarkerExpiry'
 )
 BEGIN
-    UPDATE [uses]
-    SET [ExpiresAt] = COALESCE(CONVERT(datetimeoffset, [tokens].[ExpirationDate]), CONVERT(datetimeoffset, '9999-12-31T23:59:59+00:00'))
+    EXEC(N'UPDATE [uses]
+    SET [ExpiresAt] = COALESCE(CONVERT(datetimeoffset, [tokens].[ExpirationDate]), CONVERT(datetimeoffset, ''9999-12-31T23:59:59+00:00''))
     FROM [IdentityIssuer].[OidcRefreshTokenUses] AS [uses]
-    LEFT JOIN [IdentityIssuer].[OpenIddictTokens] AS [tokens] ON [tokens].[Id] = [uses].[TokenId];
+    LEFT JOIN [IdentityIssuer].[OpenIddictTokens] AS [tokens] ON [tokens].[Id] = [uses].[TokenId];');
 END;
 
 IF NOT EXISTS (
