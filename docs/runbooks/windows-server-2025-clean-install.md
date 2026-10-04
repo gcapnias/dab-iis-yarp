@@ -1,6 +1,6 @@
 # Reproduce the issuer and Northwind DAB deployment on Windows Server 2025
 
-This is the complete installation recipe for the test topology evaluated in issue [#12](https://github.com/gcapnias/dab-iis-yarp/issues/12). Start with an empty **Windows Server 2025 Standard x64** web server and a checkout of this repository on the build workstation. Commands below create new configuration, keys and credentials; no files from an earlier `.scratch` directory are required. The request mentioned “Windows Server 2005”; the evaluated operating system is **2025**. This guide does not establish compatibility with another version.
+This is the complete installation recipe for the test topology evaluated in issue [#12](https://github.com/gcapnias/dab-iis-yarp/issues/12). Start with an empty **Windows Server 2025 Standard x64** web server and a checkout of this repository on the build workstation. Commands below create new configuration, keys and credentials; no files from an earlier `.scratch` directory are required. The user confirmed **2025** as the intended operating system. This guide does not establish compatibility with another version.
 
 The existing SQL Server is a separate machine. Installing SQL Server itself is not part of the web-server installation. You must have a reachable SQL instance containing the Northwind sample database and `dbo.Products`, and permission to create a separate Identity database. The evaluated instance was `vs2026` on TCP 1433. Supply your own SQL credentials through prompts. A hostname, an administrator credential, SQL credentials and the source checkout are deployment inputs, rather than secrets supplied by this document.
 
@@ -51,7 +51,9 @@ $hosts = @($prior -split ',' | Where-Object { $_ }) + $ServerDns
 Set-Item WSMan:\localhost\Client\TrustedHosts -Value (($hosts | Select-Object -Unique) -join ',') -Force
 ```
 
-Run the build and browser blocks in **PowerShell 7 on the workstation**, at the repository root. The evaluated tools were .NET SDK **10.0.401**, PowerShell **7.6.6**, Node.js **24.19.0**, `@playwright/cli` **0.1.22**, and Microsoft Edge. Git is needed to obtain/identify the source. Check them before publishing:
+Run the build and browser blocks in **PowerShell 7 on the workstation**, at the repository root. The evaluated application implementation is commit **`0d96f69`**; this guide and its corrections are later documentation. Use a checkout containing this guide whose application source matches that commit. Before publishing, `git diff 0d96f69 -- src scripts tests .config` must be empty for exact reproduction; if it is not, stop and select/review the intended application revision rather than claiming the recorded proof covers it. In a clean, dedicated reproduction checkout, `git checkout 0d96f69` selects the evaluated implementation (keep this later guide separately available). Do not switch a dirty checkout. Record the actual build commit below.
+
+The evaluated tools were .NET SDK **10.0.401**, PowerShell **7.6.6**, Node.js **24.19.0**, `@playwright/cli` **0.1.22**, and Microsoft Edge. Git is needed to obtain/identify the source. Check them before publishing:
 
 ```powershell
 # Workstation
@@ -95,7 +97,7 @@ New-Item -ItemType Directory -Path $Root,"$Root\installers","$Root\evidence",$Is
 $result = Install-WindowsFeature Web-Server,Web-Windows-Auth,Web-Mgmt-Tools -IncludeManagementTools
 if (-not $result.Success) { throw 'IIS feature installation failed.' }
 $result | Select-Object Success,RestartNeeded
-if ($result.RestartNeeded -eq 'Yes') { throw 'Restart Windows, reopen an elevated console and restore the variables above before continuing.' }
+if ($result.RestartNeeded -eq 'Yes') { throw 'Reboot required. Follow the resume branch below, then finish step 3 verification.' }
 Import-Module WebAdministration
 Backup-WebConfiguration -Name 'Wayfinder-BeforeDeployment'
 Get-WindowsFeature Web-* | Where-Object Installed | Select-Object Name,DisplayName
@@ -106,6 +108,34 @@ The feature command installs the following IIS tree (including dependencies/defa
 In Server Manager the added authentication role service is **Web Server (IIS) → Web Server → Security → Windows Authentication**. Application-specific enable/disable settings are applied later in IIS Manager → Sites → Default Web Site → Authentication, and separately at its `dab` application.
 
 Windows PowerShell 5.1 and Windows Server's existing .NET Framework 4.8 are OS facilities. The ASP.NET Core applications run on modern .NET 10, not the .NET Framework CLR. Installing ASP.NET 4.x, CGI, WebDAV, URL Rewrite, ARR, a DAB CLI, or a standalone DAB Service is not required by this deployment. Other installed OS features such as Defender, storage services, Wi-Fi and XPS on the reference machine are not application prerequisites.
+
+### Resume after a prerequisite reboot
+
+If step 3 reports a required reboot, or step 4 returns installer exit code 3010, restart Windows from the server console with `Restart-Computer`. Retain the workstation console, `$Stage`, `$AdminCredential` and the DNS name. After the server is back, open an elevated server console and restore only these non-secret variables; do not rerun completed installation, backup, database/account creation or key generation:
+
+```powershell
+# Server, new elevated Windows PowerShell 5.1 console after reboot
+$ErrorActionPreference = 'Stop'
+$ServerDns = 'ws2025s01.mshome.net' # Same chosen DNS name
+$Root = 'C:\DabIisProof'
+$IssuerDir = Join-Path $Root 'issuer'
+$ApiDir = Join-Path $Root 'api'
+$KeysDir = Join-Path $Root 'keys'
+$Release = '10.0.12'
+Import-Module WebAdministration
+Get-Service WAS,W3SVC
+```
+
+Recreate the invalidated session in the **existing workstation console**:
+
+```powershell
+# Workstation; preserve the existing $Stage and its artifacts
+if ($Session) { Remove-PSSession $Session -ErrorAction SilentlyContinue }
+$Session = New-PSSession -ComputerName $ServerDns -Credential $AdminCredential
+Invoke-Command -Session $Session { $env:COMPUTERNAME }
+```
+
+If that console was also closed, set `$Stage` to the **existing** staging directory, set `$ServerDns`, and reload `$AdminCredential = Import-Clixml (Join-Path $Stage 'administrator.xml')` under the same workstation user before recreating the session. If DPAPI decryption fails, prompt for administrator credentials again. After an IIS-feature reboot, verify installed features and take `Wayfinder-BeforeDeployment` once if the earlier block stopped before creating it; then proceed to step 4. After a Hosting Bundle reboot, run only the runtime/module verification at the end of step 4, then step 5. A reboot during later provisioning requires recovering the recorded configuration/state, not repeating creation steps blindly.
 
 ## 4. Install and verify the .NET Hosting Bundle
 
@@ -127,8 +157,11 @@ if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notm
 }
 $install = Start-Process $Installer -ArgumentList '/install','/quiet','/norestart','/log',"$Root\installers\hosting-install.log" -WindowStyle Hidden -Wait -PassThru
 if ($install.ExitCode -notin 0,3010) { throw "Hosting Bundle failed: $($install.ExitCode). Inspect installer log." }
-if ($install.ExitCode -eq 3010) { throw 'Restart Windows and restore console variables before continuing.' }
-Restart-Service W3SVC -Force
+if ($install.ExitCode -eq 3010) { throw 'Reboot required. Follow the step 3 resume branch, then run runtime/module verification below.' }
+# Restart WAS and its dependent web service so workers inherit the installed runtime environment.
+Stop-Service WAS -Force -ErrorAction Stop
+Start-Service W3SVC -ErrorAction Stop
+if ((Get-Service WAS).Status -ne 'Running' -or (Get-Service W3SVC).Status -ne 'Running') { throw 'IIS services did not restart.' }
 & 'C:\Program Files\dotnet\dotnet.exe' --list-runtimes
 & 'C:\Program Files (x86)\dotnet\dotnet.exe' --list-runtimes
 Get-WebGlobalModule | Where-Object Name -eq 'AspNetCoreModuleV2'
@@ -143,9 +176,9 @@ Hosting installer URL: `https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Ru
 ccfb101fc9287e2e10f16e68957a52778463a266d0ea9dc36df1c635ae2396cefba818146d1008f3d8540b90869eaa6fb59bdc4044bd532fe1f30bb26048ad68
 ```
 
-If IIS was installed after the bundle, rerun/repair the bundle before proceeding. Microsoft's [IIS hosting documentation](https://learn.microsoft.com/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0) describes the Hosting Bundle and virtual application-pool identities.
+If IIS was installed after the bundle, rerun/repair the bundle before proceeding. Microsoft's [IIS hosting documentation](https://learn.microsoft.com/aspnet/core/host-and-deploy/iis/?view=aspnetcore-10.0) describes the Hosting Bundle and virtual application-pool identities; the [Hosting Bundle instructions](https://learn.microsoft.com/aspnet/core/host-and-deploy/iis/hosting-bundle?view=aspnetcore-10.0) require restarting WAS/W3SVC or restarting Windows.
 
-## 5. Publish, generate private keys, and transfer artifacts
+## 5. Publish, generate private keys, and transfer non-secret artifacts
 
 ```powershell
 # Workstation, PowerShell 7, repository root; $Stage/$Session from step 2
@@ -165,7 +198,7 @@ foreach ($name in 'signing','encryption') {
 }
 Copy-Item "$Stage/issuer/*" -Destination 'C:\DabIisProof\issuer' -ToSession $Session -Recurse -Force
 Copy-Item "$Stage/api/*" -Destination 'C:\DabIisProof\api' -ToSession $Session -Recurse -Force
-Copy-Item "$Stage/keys/*" -Destination 'C:\DabIisProof\keys' -ToSession $Session -Force
+# Do NOT transfer private keys yet. Step 6 protects and verifies the server directories first.
 Copy-Item src/EmbeddedDab/configurations/northwind-iis.json -Destination 'C:\DabIisProof\northwind-template.json' -ToSession $Session
 Copy-Item archive/research/identity-issuer/IdentityIssuer-current-idempotent.sql -Destination 'C:\DabIisProof\identity-schema.sql' -ToSession $Session
 git rev-parse HEAD | Set-Content "$Stage/source-commit.txt"
@@ -203,9 +236,41 @@ function Set-PrivateDirectoryAcl([string]$Path,[string]$Pool) {
 Set-PrivateDirectoryAcl $IssuerDir 'DabProofIssuer'
 Set-PrivateDirectoryAcl $ApiDir 'DabProofApi'
 Set-PrivateDirectoryAcl $KeysDir 'DabProofIssuer'
+
+function Assert-PrivateAcl([string]$Path,[string]$Pool,[switch]$Directory) {
+    $acl = Get-Acl -LiteralPath $Path
+    $poolSid = (New-Object Security.Principal.NTAccount("IIS AppPool\$Pool")).Translate([Security.Principal.SecurityIdentifier]).Value
+    $allowed = @('S-1-5-18','S-1-5-32-544',$poolSid)
+    if ($Directory -and -not $acl.AreAccessRulesProtected) { throw "Directory inheritance is not disabled: $Path" }
+    $seen = @()
+    foreach ($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) {
+        $sid = $ace.IdentityReference.Value
+        if ($sid -notin $allowed -or $ace.AccessControlType -ne 'Allow') { throw "Unexpected ACL principal or rule: $Path" }
+        $required = if ($sid -eq $poolSid) { [Security.AccessControl.FileSystemRights]::ReadAndExecute -bor [Security.AccessControl.FileSystemRights]::Synchronize } else { [Security.AccessControl.FileSystemRights]::FullControl }
+        if ($ace.FileSystemRights -ne $required) { throw "Unexpected ACL rights: $Path" }
+        $seen += $sid
+    }
+    foreach ($sid in $allowed) { if ($sid -notin $seen) { throw "Required ACL principal missing: $Path" } }
+}
+Assert-PrivateAcl $IssuerDir 'DabProofIssuer' -Directory
+Assert-PrivateAcl $ApiDir 'DabProofApi' -Directory
+Assert-PrivateAcl $KeysDir 'DabProofIssuer' -Directory
 ```
 
-These are fresh directories/files, with no separately protected child ACLs. Verify `icacls $IssuerDir`, `icacls $ApiDir`, `icacls $KeysDir` and the key files: only SYSTEM, Administrators and the appropriate pool should have access. Administrators/SYSTEM have Full Control; each pool has Read & Execute. No `Everyone`, `Users`, `IUSR`, shared `IIS_IUSRS`, or API-pool grant belongs on the issuer's secrets. No write permission is needed for normal application files. The pools retain the tested default 20-minute idle timeout and default recycling settings; lifecycle tuning is a separate production decision.
+Only after those assertions succeed, transfer keys from the retained workstation stage:
+
+```powershell
+# Workstation
+Copy-Item "$Stage/keys/*" -Destination 'C:\DabIisProof\keys' -ToSession $Session -Force
+```
+
+```powershell
+# Server
+Assert-PrivateAcl "$KeysDir\signing.pem" 'DabProofIssuer'
+Assert-PrivateAcl "$KeysDir\encryption.pem" 'DabProofIssuer'
+```
+
+These are fresh directories/files, with no separately protected child ACLs. The assertions stop on unwanted principals, missing required grants, unexpected rights or inherited directory permissions. Administrators/SYSTEM have Full Control; each pool has Read & Execute. No `Everyone`, `Users`, `IUSR`, shared `IIS_IUSRS`, or API-pool grant belongs on the issuer's secrets. No write permission is needed for normal application files. The pools retain the tested default 20-minute idle timeout and default recycling settings; lifecycle tuning is a separate production decision.
 
 ## 7. Create the Identity database and confirm Northwind
 
@@ -213,8 +278,10 @@ Run on the server. This uses built-in .NET Framework SqlClient, so it needs **no
 
 ```powershell
 # Server
-$SqlServer = 'vs2026,1433' # Replace with your external SQL endpoint
-if (-not (Test-NetConnection ($SqlServer -split ',')[0] -Port 1433).TcpTestSucceeded) { throw 'SQL TCP connectivity failed.' }
+$SqlHost = 'vs2026' # Replace with your external SQL host
+$SqlPort = 1433    # Replace if SQL listens on a different TCP port
+$SqlServer = "tcp:$SqlHost,$SqlPort"
+if (-not (Test-NetConnection $SqlHost -Port $SqlPort).TcpTestSucceeded) { throw 'SQL TCP connectivity failed.' }
 $SqlAdmin = Get-Credential -Message 'SQL login allowed to create the isolated Identity database'
 $IssuerSql = Get-Credential -Message 'SQL login for the Identity runtime (must have rights to the new database)'
 $NorthwindSql = Get-Credential -Message 'SQL login with SELECT permission on Northwind.dbo.Products'
@@ -340,6 +407,16 @@ Set-Acl "$IssuerDir\web.config" $webAcl
 icacls "$IssuerDir\appsettings.Development.json"
 icacls "$KeysDir\signing.pem"
 icacls "$ApiDir\dab-config.json"
+# Fail on any API grant reaching issuer secrets, or any other unwanted secret-file principal.
+Assert-PrivateAcl "$IssuerDir\appsettings.Development.json" 'DabProofIssuer'
+Assert-PrivateAcl "$KeysDir\signing.pem" 'DabProofIssuer'
+Assert-PrivateAcl "$KeysDir\encryption.pem" 'DabProofIssuer'
+Assert-PrivateAcl "$ApiDir\dab-config.json" 'DabProofApi'
+$apiSid = (New-Object Security.Principal.NTAccount('IIS AppPool\DabProofApi')).Translate([Security.Principal.SecurityIdentifier]).Value
+$apiParentRules = @((Get-Acl $IssuerDir).GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference.Value -eq $apiSid })
+if ($apiParentRules.Count -ne 1 -or $apiParentRules[0].InheritanceFlags -ne 'None' -or $apiParentRules[0].IsInherited -or $apiParentRules[0].AccessControlType -ne 'Allow' -or $apiParentRules[0].FileSystemRights -ne [Security.AccessControl.FileSystemRights]'ListDirectory,ReadAttributes,Traverse,Synchronize') {
+    throw 'API parent-directory grant must be the exact non-inherited configuration-discovery grant.'
+}
 ```
 
 Confirm the API has no ACE on issuer appsettings/private keys. Its issuer-directory grant must have **no inheritance**. Giving only ReadAttributes/Traverse caused an ANCM startup hang on the tested server; ListDirectory was also required. Do not recursively grant the API access to the issuer directory to fix startup.
@@ -478,7 +555,7 @@ For binary updates: publish to a fresh directory; stop the owned pool; wait unti
 | API 404 or pagination points at `/api` | API is an IIS application with its own pool; DAB base-route `/dab`; REST `/api`; Request.PathBase source fix included. |
 | Discovery succeeds in browser but DAB cannot validate JWT | Server trusts hostname certificate; issuer URL includes trailing slash; server DNS/backchannel HTTPS works without bypass. |
 | Windows login succeeds but no roles / denied session | New account SID is mapped into the correct Identity database; caller active/not locked/expired; explicit reader/writer roles persisted. |
-| SQL failure | TCP 1433 reachable, correct login and catalog, Identity migrations applied, Northwind.dbo.Products readable, configured SQL encryption policy. |
+| SQL failure | Configured SQL TCP port reachable, correct login and catalog, Identity migrations applied, Northwind.dbo.Products readable, configured SQL encryption policy. |
 | Browser test cannot authenticate | Fresh caller credential XML, current password, exact issuer origin; never use the administrator file as browser caller. |
 
 For temporary ANCM stdout diagnostics, create `api\logs` or `issuer\logs` and grant Modify **only** to that application's pool plus administrators/SYSTEM, enable stdout in its web.config briefly, then disable it and protect/remove diagnostic logs after inspection. Do not grant Modify to the entire application directory. Routine operation uses the default IIS logs and stdout disabled.

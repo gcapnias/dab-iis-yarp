@@ -18,7 +18,9 @@ If a required proof fails, diagnose the package, supplemental dependencies, and 
 
 - For the archived multi-target project, install a .NET 10 SDK and the .NET 8 and .NET 10 ASP.NET Core runtimes. The recorded builds used SDK 10.0.401. A new project targeting only .NET 8 can use its matching SDK/runtime.
 - An accessible SQL Server database named `northwind`, containing `dbo.Products` with primary key `ProductID`. The proof database had 77 rows; Chai and Chang were the first two products. Verification assumes ProductIDs 1 and 2 exist.
-- A connection with permission to read the table and discover its metadata. No database provisioning or data changes are required by this runbook.
+- For the **archived Products read proof only**, a connection with table-read and metadata permissions. That proof does not provision databases or change data.
+- For **disposable fixture proofs (#9 and local interoperability)**, a separate authorized SQL connection with CREATE/DROP DATABASE and fixture schema/data permissions. The verifier creates and deletes its own `dab_ticket9_...` database. Do not substitute a read-only Northwind runtime login or give it these privileges merely to run tests.
+- For local issuer interoperability, Windows/PowerShell 7, Edge, Node.js and `@playwright/cli` are required on the workstation, plus a localhost developer certificate, a separate migrated Identity database, the current Windows caller mapping/roles, and the browser OIDC client. Complete [local issuer setup](windows-authentication-jwt-issuer.md#local-configuration-and-startup) first. Exact tool checks/versions are in the [clean-install guide](windows-server-2025-clean-install.md#2-prepare-access-and-the-build-workstation).
 - The spike branch/artifacts available locally. Commands start from the checkout containing `archive/spikes/dab-core-hosting/`.
 
 ## Connection and secrets
@@ -38,7 +40,7 @@ NORTHWIND_CONNECTION_STRING="Server=<server>;Database=northwind;User ID=<user>;P
 
 The validated development connection uses `Encrypt=True;TrustServerCertificate=True`, explicitly approved for this instance. Encryption remains enabled, but the client does not validate the server certificate chain. Use `TrustServerCertificate=False` when the server presents a certificate trusted by the client.
 
-The supplied host loads the absolute path in `DAB_ENV_FILE`, finds a dotenv entry whose parsed database is `northwind`, and sets `DAB_CONNECTION_STRING` in its own process. The dotenv variable name is not fixed. A linked worktree can use the primary checkout's `.env`; do not copy credentials into the worktree or into DAB JSON. If supplying `DAB_CONNECTION_STRING` directly through the process environment instead, omit `DAB_ENV_FILE` and configure secret-safe logging appropriate to that host.
+The supplied DAB host loads the absolute path in `DAB_ENV_FILE`, finds a dotenv entry whose parsed database is `northwind`, and sets `DAB_CONNECTION_STRING` in its own process. **Only this DAB loader** accepts an arbitrary variable name. The issuer launcher reads only `.env`'s `ConnectionString`, which overrides an explicit Identity environment connection when present. A linked worktree can use the primary checkout's `.env`; keep credentials private. Protected deployed DAB JSON is the separately approved test-server storage mechanism, not a place to copy fixture credentials. If supplying `DAB_CONNECTION_STRING` directly, omit `DAB_ENV_FILE`.
 
 ## Run the validated host
 
@@ -95,7 +97,7 @@ The recorded runs passed on both frameworks. ADR-0002 subsequently selected .NET
 The runnable prototype and verifier are under `src/EmbeddedDab/` and `scripts/test-embedded-dab.ps1`. The verifier builds once, creates a uniquely named disposable database on the SQL Server configured by the primary checkout's ignored `.env`, runs both configurations against that same binary, then drops the fixture database. It does not write to Northwind. Run it from any checkout in this repository:
 
 ```powershell
-./scripts/test-embedded-dab.ps1
+pwsh -NoProfile -File scripts/test-embedded-dab.ps1
 ```
 
 The first configuration exposes `Widget` and read-only `RetiredWidget` at `/api`, with GraphQL at `/graphql`. The expanded configuration changes the global REST path to `/v2`, changes the `Widget` entity path to `catalog/widgets`, adds `Label`, and removes `RetiredWidget`; it moves GraphQL to `/gql-v2`. The verifier checks REST collection and key reads, create/upsert/update/delete operations, permission denial for a disallowed REST mutation, GraphQL query/create/update/delete mutations, permission-driven schema omissions, and route/schema changes after restarting the unchanged binary. For PUT/PATCH, no `If-Match` header retains upsert behavior; a single exact `If-Match: *` selects update-only behavior and rejects missing keys with HTTP 400; any other present value, including multiple values, returns HTTP 400 without mutation, matching pinned DAB 2.0.12 `RestController` semantics.
@@ -121,11 +123,35 @@ The merged [interoperability implementation](../../archive/research/dab-jwt-inte
 
 The host reads `dab_access_token` when no Authorization header is present. Cookie extraction runs before authentication, then DAB authenticates, then the host validates identity-bound antiforgery and exact same-origin `Origin` on unsafe cookie requests. Explicit bearer credentials take precedence. A browser obtains the request token from `GET /bridge/csrf` and sends it as `X-CSRF-TOKEN` on POST/PUT/PATCH/DELETE, including GraphQL POST. The browser must send cookies to the API origin; no CORS permission is implied by shared cookie scope.
 
-For the controlled disposable regression proof, run `./scripts/test-embedded-dab-jwt.ps1`. For the complete real local setup/browser/cleanup proof, run `pwsh -NoProfile -File scripts/test-dab-issuer-live.ps1`. For already running applications, run `./scripts/test-dab-issuer-browser.ps1 -Issuer https://localhost:5001 -Api https://localhost:5002`. The [live proof](../../archive/research/dab-jwt-interoperability/LIVE-PROOF.md) records successful real Windows/database/browser-to-DAB reads, mutations, permission/role denials, antiforgery and logout on both REST and GraphQL. Twelve controlled regression tests complement that live evidence.
+For controlled disposable regression, run `pwsh -NoProfile -File scripts/test-embedded-dab-jwt.ps1` with the fixture SQL privileges above. The [live proof](../../archive/research/dab-jwt-interoperability/LIVE-PROOF.md) records real Windows/database/browser-to-DAB reads, mutations, denials, antiforgery and logout. Controlled regression tests complement it.
+
+`scripts/test-dab-issuer-live.ps1` is **acceptance of an already provisioned local issuer**, not a full Identity setup. It launches its own local hosts, creates/drops a mutation fixture and performs cleanup, but does not migrate Identity, map the caller or register its browser client. Complete the issuer setup and browser-client registration first; the current caller needs reader/writer roles. The browser checks accept a nonempty clearance claim, while the separate issuer HTTP harness requires `Level3`.
+
+For that live launcher, the primary checkout's `.env` must exist with the Northwind connection used to create its separate fixture. Use the arbitrary `NORTHWIND_CONNECTION_STRING` example above; **do not add a `ConnectionString` entry with a different catalog**, because the child issuer launcher would overwrite its inherited Identity environment. Supply the isolated Identity connection using the secret-safe block in the issuer runbook and verify that catalog before launching. The launcher uses its primary `.scratch` signing/encryption keys and registers neither caller nor client; ports 5001/5002 must be unused. It selects the existing developer certificate's exact public fingerprint for the localhost DAB backchannel. Keep the Identity store separate from the fixture database that cleanup drops.
+
+```powershell
+# Workstation PowerShell 7, after issuer provisioning; stop the manually started issuer first.
+# Keep ConnectionStrings__IssuerIdentity set to the isolated, migrated Identity store.
+pwsh -NoProfile -File scripts/test-dab-issuer-live.ps1
+```
+
+For **already running local hosts configured with disposable Widgets/RetiredWidgets**, the default browser verifier creates and deletes REST/GraphQL fixture rows:
+
+```powershell
+pwsh -NoProfile -File scripts/test-dab-issuer-browser.ps1 -Issuer https://localhost:5001 -Api https://localhost:5002
+```
+
+Do not point that mutation mode at the Northwind deployment. For the already provisioned IIS server, use the **read-only** mode and its dedicated caller file created by the clean-install/retained-state guides:
+
+```powershell
+pwsh -NoProfile -File scripts/test-dab-issuer-browser.ps1 -Issuer https://ws2025s01.mshome.net/ -Api https://ws2025s01.mshome.net/dab -CredentialFile .scratch/ws2025s01/browser-credentials.xml -Northwind
+```
 
 Browser `ignoreHTTPSErrors` affects only the test browser. It does not grant DAB's discovery/JWKS client trust in the issuer certificate. The approved local proof uses `DAB_DEVELOPMENT_ISSUER_CERTIFICATE_SHA256`: an exact 64-hex SHA-256 certificate fingerprint, selected by the live harness from the issuer's presented public leaf only after it matches an existing ASP.NET developer certificate. This option is accepted only in Development and only for the configured HTTPS localhost issuer origin. The certificate must match the pin, be currently valid, and support Server Authentication; hostname mismatch and other origins/ports fail closed. No workstation certificate-store change is performed. Omit the pin for normal CA-backed TLS validation. Changing the developer certificate requires reselecting its pin and restarting the API; do not carry this local option into production configuration.
 
 ## Troubleshooting and limits
+
+The authoritative [EmbeddedDab project](../../src/EmbeddedDab/EmbeddedDab.csproj) pins Core **2.0.12**, Azure.Security.KeyVault.Secrets **4.6.0**, OpenTelemetry.Exporter.OpenTelemetryProtocol **1.15.3**, Serilog.Sinks.File **7.0.0** and Humanizer.Core **2.14.1**. Retain all five in a separately created host; restoring Core alone is insufficient.
 
 | Symptom | Check |
 | --- | --- |
@@ -136,4 +162,4 @@ Browser `ignoreHTTPSErrors` affects only the test browser. It does not grant DAB
 | Configuration file missing | Run from the project directory or set a deliberate content root/config path. |
 | Address already in use | Select an unused localhost port and stop only the host started for this run. |
 
-The original Products proof establishes only an anonymous collection read and same-process shutdown. The configuration-driven API proof adds fixture-backed REST CRUD/key routes, GraphQL query/mutation, configuration permissions, and restart-based configuration changes. The issuer interoperability proof above adds real local JWT/cookie and role-selection evidence. These proofs do not establish live reload, MCP, production observability, IIS deployment, or an upstream-supported hosting contract. Keep secrets out of diagnostics; the prototype disables logging providers and returns generic errors for rejected REST requests.
+The original Products proof establishes only an anonymous collection read and same-process shutdown. Configuration-driven proof adds fixture REST CRUD/key routes, GraphQL query/mutation, permissions and restart-based changes; issuer interoperability adds JWT/cookie and role evidence. The later [IIS evaluation](../../archive/research/windows-server-iis/EVALUATION.md) separately establishes the tested Windows Server topology. These proofs do not establish live reload, MCP, production observability or an upstream-supported hosting contract. Keep secrets out of diagnostics; the prototype disables logging providers and returns generic REST rejection errors.

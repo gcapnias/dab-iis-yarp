@@ -74,7 +74,35 @@ Exclude `UriQuery` from IIS site logging before any OIDC callback tests. The app
 
 ## Browser verification from the workstation
 
-Use the existing Microsoft Edge and `playwright-cli` installation. The dedicated caller credential is stored with `Export-Clixml`, under ignored scratch space; neither the administrator remoting credential nor a signing key is required by these browser commands.
+Use workstation PowerShell 7, Microsoft Edge and `playwright-cli`, with [tool checks/versions](windows-server-2025-clean-install.md#2-prepare-access-and-the-build-workstation). The first two browser commands require only the dedicated non-administrator caller credential. The separate HTTP token matrix additionally requires the **existing matching test issuer signing key**. Administrator remoting credentials are not browser-test credentials.
+
+### Recover verification inputs for the retained server
+
+Ignored scratch files are not durable prerequisites. If they are gone, recreate the credential file for the **existing** `WS2025S01\DabProofUser` and its current password. The account must still be enabled, unexpired, and mapped in the retained Identity database; recreating a local XML file does not repair server account state. Do not rerun the clean-install account/database/key creation steps against this retained installation.
+
+```powershell
+# Workstation PowerShell 7, repository root; fresh protected recovery directory
+$ReviewInputs = Join-Path (Get-Location) ('.scratch/iis-rerun-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory $ReviewInputs | Out-Null
+$operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+icacls $ReviewInputs /inheritance:r /grant:r "*${operatorSid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
+if ($LASTEXITCODE -ne 0) { throw 'Recovery directory ACL failed.' }
+Get-Credential -UserName 'WS2025S01\DabProofUser' -Message 'Existing non-administrator caller password' | Export-Clixml "$ReviewInputs/browser-credentials.xml"
+$BrowserCredentials = "$ReviewInputs/browser-credentials.xml"
+$SigningKeyFile = "$ReviewInputs/signing.pem"
+```
+
+DPAPI binds this XML password to its exporting workstation/user. Recreate it rather than transferring another user's XML. If the original matching test signing key is retained in protected operator storage, copy it privately to `$SigningKeyFile`. If that copy is lost, an authorized administrator can retrieve the retained **test** key as follows; obtaining a private key requires operator approval and is not part of ordinary browser verification:
+
+```powershell
+# Workstation; only for an operator-approved copy of this test issuer key
+$RetainedAdmin = Get-Credential -Message 'Administrator for retained test server'
+$RecoverySession = New-PSSession -ComputerName ws2025s01.mshome.net -Credential $RetainedAdmin
+try { Copy-Item 'C:\DabIisProof\keys\signing.pem' -Destination $SigningKeyFile -FromSession $RecoverySession }
+finally { Remove-PSSession $RecoverySession }
+```
+
+The token matrix compares its public modulus with the issuer's JWKS and refuses a mismatched key. Never generate a replacement signing key as scratch-file recovery: that is coordinated key rotation. Never retrieve a production key for these tests. The two browser commands can run without any private key. For an existing protected input directory, alternatively set `$BrowserCredentials` and `$SigningKeyFile` to the two known files without copying them. Use those variables in the commands below.
 
 ```powershell
 pwsh -NoProfile -File scripts/test-identity-issuer-iis.ps1 `
@@ -82,19 +110,19 @@ pwsh -NoProfile -File scripts/test-identity-issuer-iis.ps1 `
   -ClientId dab-issuer-iis-browser-client `
   -RedirectUri 'https://ws2025s01.mshome.net/oidc-browser-test/callback' `
   -AccessAudience 'api://dab-interoperability-test' `
-  -CredentialFile .scratch/ws2025s01/browser-credentials.xml
+  -CredentialFile $BrowserCredentials
 
 pwsh -NoProfile -File scripts/test-dab-issuer-browser.ps1 `
   -Issuer 'https://ws2025s01.mshome.net/' `
   -Api 'https://ws2025s01.mshome.net/dab' `
-  -CredentialFile .scratch/ws2025s01/browser-credentials.xml `
+  -CredentialFile $BrowserCredentials `
   -Northwind
 
 pwsh -NoProfile -File scripts/test-dab-iis-token-validation.ps1 `
   -Issuer 'https://ws2025s01.mshome.net/' `
   -Api 'https://ws2025s01.mshome.net/dab' `
-  -CredentialFile .scratch/ws2025s01/browser-credentials.xml `
-  -SigningKeyFile .scratch/ws2025s01/signing.pem
+  -CredentialFile $BrowserCredentials `
+  -SigningKeyFile $SigningKeyFile
 ```
 
 The harness restricts explicit Windows browser credentials to the issuer origin, writes its transient browser configuration under ignored scratch space, and removes it after closing the browser. Without `-Northwind`, the DAB verifier expects the disposable Widgets/RetiredWidgets configuration and exercises mutations. Its test rows are deleted during a successful run. Keep the issuer Identity database separate from any fixture that a local test harness automatically drops.
