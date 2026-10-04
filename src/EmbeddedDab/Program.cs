@@ -71,6 +71,7 @@ builder.Services.AddAuthentication()
     .AddJwtBearer()
     .AddSimulatorAuthentication()
     .AddUnauthenticatedAuthentication();
+DevelopmentIssuerCertificate.Configure(builder);
 builder.Services.AddSingleton<RuntimeConfigValidator>();
 builder.Services.AddSingleton<IQueryEngineFactory, QueryEngineFactory>();
 builder.Services.AddSingleton<IMutationEngineFactory, MutationEngineFactory>();

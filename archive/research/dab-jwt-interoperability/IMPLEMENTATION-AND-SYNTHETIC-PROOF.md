@@ -52,3 +52,5 @@ No credentials, personal profile values, raw JWTs, authorization codes, refresh 
 These tests are controlled synthetic evidence. They establish that issuer-shaped RS256 JWTs and the issuer cookie contract interoperate with the actual embedded DAB 2.0.12 Custom provider on a disposable SQL schema. The signing key and discovery server are generated solely for the test; identity and roles are fixture values.
 
 This result does not establish the live Windows caller-to-SQL Identity profile/roles-to-JWT/cookie-to-DAB chain, browser delivery under a real origin, or trusted TLS between the applications. Those remain local interoperability acceptance work for this ticket. Windows Server/IIS behavior, external IIS/proxy access-log handling, and production deployment are separate later evaluation or delivery work. The synthetic proof alone is not an end-to-end go finding.
+
+The subsequent [live proof](LIVE-PROOF.md) records the completed local Windows/database/browser chain, the explicitly approved Development-only developer-certificate pin, and the later 12-test regression result. This document preserves the original ten-test synthetic implementation evidence.
