@@ -56,6 +56,14 @@ _Avoid_: AD group, operating-system permission
 The persisted issuer accounts, profiles, roles and credential-renewal state. It is separate from the resources exposed to callers through DAB.
 _Avoid_: Northwind account store, API resource data
 
+**Issuer-state recovery**:
+Restoration of the issuer's persisted identity, authorization and credential-renewal state while preserving account restrictions and credential revocations. Restoring earlier data does not by itself establish safe recovery.
+_Avoid_: Database restore as authorization recovery, binary rollback
+
+**Issuer outage tolerance**:
+The API's ability to serve callers with unexpired, verifiable access credentials while the issuer is unavailable and resource dependencies remain usable. It does not imply that login, refresh or a newly started API can operate without the issuer.
+_Avoid_: Issuer-independent authentication, unconditional offline access
+
 **DAB resource store**:
 The data exposed through configured DAB resources and governed by configured resource permissions. Access to that data does not provision an issuer account or assign its roles.
 _Avoid_: Identity database, login store
@@ -91,6 +99,10 @@ _Avoid_: IIS proof, production readiness
 **Server environment evaluation**:
 Evidence that the delivered applications work in an identified Windows Server/IIS test environment, with its identities, permissions and acceptance scope stated explicitly.
 _Avoid_: Local Kestrel proof, production rollout
+
+**Accepted installation evidence**:
+Evidence accepted for this effort from installing and verifying the applications in an initially empty Windows environment. Acceptance of this first installation does not claim that the documented procedure has been repeated in another environment.
+_Avoid_: Second-server proof, production readiness
 
 **Deployment reproduction proof**:
 Evidence that the delivered applications can be installed and verified in another empty test environment by following the documented procedure. A successful existing-server evaluation or reviewed installation guide does not alone establish this proof.
