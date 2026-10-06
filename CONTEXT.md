@@ -53,12 +53,20 @@ An operator-assigned role persisted for an issuer account and carried in its acc
 _Avoid_: AD group, operating-system permission
 
 **Issuer store**:
-The persisted issuer accounts, profiles, roles and credential-renewal state. It is separate from the resources exposed to callers through DAB.
+The persisted issuer accounts, profiles, roles, OIDC client registrations and credential-issuance and renewal state. It is separate from the resources exposed to callers through DAB.
 _Avoid_: Northwind account store, API resource data
 
 **Issuer-state recovery**:
-Restoration of the issuer's persisted identity, authorization and credential-renewal state while preserving account restrictions and credential revocations. Restoring earlier data does not by itself establish safe recovery.
+Restoration of the issuer's persisted identity, client authorization and credential state while preserving account restrictions and credential revocations. Restoring earlier data does not by itself establish safe recovery.
 _Avoid_: Database restore as authorization recovery, binary rollback
+
+**Issuer recovery record**:
+The protected record of approved authorization changes and revocations used to reconcile restored issuer state. Its authority is independent of the state restored from issuer backups.
+_Avoid_: Database backup as permission proof, diagnostic log
+
+**Issuer recovery boundary**:
+The distinction between credential-issuance grants established before issuer recovery and those permitted afterward. Restoring issuer data, configuration or keys does not make earlier invalidated grants current again.
+_Avoid_: Database restore timestamp, key replacement as complete session invalidation
 
 **Issuer outage tolerance**:
 The API's ability to serve callers with unexpired, verifiable access credentials while the issuer is unavailable and resource dependencies remain usable. It does not imply that login, refresh or a newly started API can operate without the issuer.
@@ -73,12 +81,24 @@ Disposable resource data explicitly authorized for verification that creates, up
 _Avoid_: Northwind write proof, unrestricted test data
 
 **Cookie session**:
-The browser's issuer-managed access and refresh credentials, separate from the browser's cached Windows Authentication state. Ending that session removes browser credentials and revokes refresh access, but does not invalidate a copied access credential before its expiry.
+The browser's issuer-managed access and refresh credentials, separate from its cached Windows Authentication state. Browser sign-out clears those credentials; complete issuer logout additionally revokes refresh access, while copied access credentials remain valid until expiry.
 _Avoid_: Windows logon session
+
+**Application session page**:
+The integrated application's browser interface for validated identity, requested resource role and issuer-managed session actions. It is separate from business data screens and issuer administration.
+_Avoid_: Data editor, issuer administration portal
+
+**Browser sign-out**:
+Removal of the browser's application credentials without ending cached Windows Authentication or revoking copied access credentials. If issuer refresh revocation cannot be confirmed, that remaining state is reported separately.
+_Avoid_: Windows logout, complete token revocation
 
 **Refresh family**:
 The lineage of rotating refresh credentials for one session or authorization. Reuse of a consumed credential revokes that lineage, including its active descendants.
 _Avoid_: Independent reusable refresh token
+
+**Renewal session**:
+The bounded opportunity established by explicit sign-in to renew access credentials through browser or OIDC refresh. Its absolute duration and timeout between successful renewals are separate from access-credential expiry and human activity.
+_Avoid_: Access-token lifetime, human-inactivity session
 
 **Embedded-host cookie bridge**:
 The DAB application's boundary that adapts the issuer's browser credential for validation by the DAB engine. Transport adaptation does not authenticate the caller or grant resource permissions on its own.
