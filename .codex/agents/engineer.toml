@@ -1,6 +1,6 @@
 name = "engineer"
 description = "Create a piece of work based on a spec or set of tickets. Use when the user wants a spec, ticket, or bead built."
-model = "gpt-6-sol"
+model = "gpt-6.1-sol"
 model_reasoning_effort = "high"
 developer_instructions = """
 # Agent Instructions
