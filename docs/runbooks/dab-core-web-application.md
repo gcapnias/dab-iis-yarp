@@ -2,6 +2,34 @@
 
 Validated on 2026-10-03 with `Microsoft.DataApiBuilder.Core` 2.0.12 and .NET 10 against a disposable SQL Server fixture. This runbook preserves the original Products-read reproduction and now documents the configuration-driven REST/GraphQL proof. The [original hosting research](../../archive/research/dab-core-hosting/README.md) and [configuration-driven proof report](../../archive/research/dab-core-hosting/CONFIGURATION-DRIVEN-PROOF.md) contain the evidence and coverage limits.
 
+## Start the current prototype
+
+The current application is `src/EmbeddedDab`, targeting .NET 10. The archived Products-only host later in this runbook preserves the initial proof. Use the [prototype customization guide](../prototype-handoff.md) for the current source map, settings and evidence.
+
+First complete [local issuer setup](windows-authentication-jwt-issuer.md#local-configuration-and-startup). To run read-only Northwind access locally, copy [northwind-iis.json](../../src/EmbeddedDab/configurations/northwind-iis.json) into a private configuration file under `.scratch/local-dab.json`. Remove `runtime.base-route` for a root-mounted local host, change its JWT issuer to the configured local issuer URL and its audience to the issuer's configured audience. Keep its read-only permissions. For the evaluated IIS deployment, retain `/dab` as the base route and follow the [server procedure](windows-server-2025-clean-install.md).
+
+In a separate PowerShell 7 terminal at the repository root, after preparing that file:
+
+```powershell
+$env:DAB_CONFIG_FILE = (Resolve-Path '.scratch/local-dab.json').Path
+$resourceSecret = Read-Host 'Northwind read-only SQL connection string with Encrypt=True' -AsSecureString
+$env:DAB_CONNECTION_STRING = [pscredential]::new('unused', $resourceSecret).GetNetworkCredential().Password
+Remove-Item Env:DAB_ENV_FILE -ErrorAction SilentlyContinue
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+dotnet run --project src/EmbeddedDab/EmbeddedDab.csproj --no-launch-profile -- --initialize --urls https://localhost:5002
+```
+
+The local host requires an existing localhost HTTPS certificate. Discovery/JWKS access from the API to the issuer also needs server-side trust. If using the existing untrusted developer certificate, set the explicitly documented `DAB_DEVELOPMENT_ISSUER_CERTIFICATE_SHA256` exception before startup as described under [issuer JWT and browser-cookie integration](#issuer-jwt-and-browser-cookie-integration). Browser verification's certificate bypass is separate.
+
+With a valid issuer access credential, the resource URLs are `/api/Products` and `/graphql`. Use the documented browser bridge or an Authorization bearer header; the `/host` diagnostic alone does not establish authenticated API access. The live fixture/browser verifier below provides the existing integrated verification procedure.
+
+After stopping the process, clear its private process inputs:
+
+```powershell
+Remove-Item Env:DAB_CONNECTION_STRING, Env:DAB_CONFIG_FILE, Env:DAB_DEVELOPMENT_ISSUER_CERTIFICATE_SHA256 -ErrorAction SilentlyContinue
+Remove-Variable resourceSecret -ErrorAction SilentlyContinue
+```
+
 ## Current application baseline
 
 The external Windows Server 2025 deployment and IIS-specific configuration/ACL requirements are in the [server runbook](windows-server-iis-evaluation.md). The [evaluation report](../../archive/research/windows-server-iis/EVALUATION.md) records the passing isolated IIS mutation proof and final Northwind REST/GraphQL browser/token proof. The deployed host can use its protected DAB connection configuration directly; the optional environment-file loader is retained for local fixtures.
