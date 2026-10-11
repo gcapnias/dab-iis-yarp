@@ -124,10 +124,10 @@ From the repository root, the following commands build/test source without deplo
 dotnet build src/IdentityIssuer/IdentityIssuer.csproj -c Release
 dotnet build src/EmbeddedDab/EmbeddedDab.csproj -c Release
 dotnet test tests/IdentityIssuer.Tests/IdentityIssuer.Tests.csproj -c Release
-dotnet test tests/EmbeddedDab.Tests/EmbeddedDab.Tests.csproj -c Release
+dotnet test tests/EmbeddedDab.Tests/EmbeddedDab.Tests.csproj -c Release --filter 'FullyQualifiedName!~JwtDabIntegrationTests'
 ```
 
-Standalone DAB tests skip SQL-backed integration checks when `DAB_ENV_FILE` or `DAB_FIXTURE_DATABASE` is absent. Use `scripts/test-embedded-dab-jwt.ps1` with its authorized fixture connection for those checks; a standalone test pass alone does not report that coverage.
+The filtered DAB command runs the three tests that do not require SQL. The current test runner reports the SQL-backed tests' intended dynamic skip as a failure when `DAB_ENV_FILE` or `DAB_FIXTURE_DATABASE` is absent; do not use an unfiltered standalone run as the database-free baseline. For the full 13-test suite, use `pwsh -NoProfile -File scripts/test-embedded-dab-jwt.ps1 -DotEnvFile <absolute-fixture-env-path>` with an authorized fixture connection. That harness supplies the fixture inputs and removes its generated database afterward. A filtered test pass does not establish SQL integration coverage.
 
 For framework-dependent delivery, publish both projects into separate staging folders:
 
@@ -150,6 +150,8 @@ Choose verification matching your changes:
 
 The fixture verifiers create/drop isolated databases and require a separate authorized fixture connection. They do not use the read-only Northwind runtime login for database creation. The IIS browser script's `-Northwind` switch selects the read-only path; its default mode writes disposable Widgets fixture data. Exact required tools, credentials and cleanup procedures remain in the linked runbooks.
 
+For the retained Windows Server/IIS environment, use the three commands in the [retained-server verification procedure](runbooks/windows-server-iis-evaluation.md#recover-verification-inputs-for-the-retained-server). They target the deployed issuer and `/dab` application using the existing non-administrator test caller. The localhost launcher is a separate local proof and does not verify that IIS deployment. Retained `.scratch` inputs are conveniences for this workstation; recipients obtain their own credentials and matching test key through the documented procedure.
+
 ## Recorded evidence
 
 These are historical results for their stated revisions and scopes, not tests rerun while preparing this guide.
@@ -162,3 +164,5 @@ These are historical results for their stated revisions and scopes, not tests re
 | [Windows Server/IIS evaluation](../archive/research/windows-server-iis/EVALUATION.md) | Separate pools, real browser/token checks, fixture operations and final read-only Northwind |
 
 The first completed ground-up Windows installation is accepted for this effort. Recipients can use its procedure for their own environment; a second empty-server repetition is not a handoff requirement. Earlier reports and decision text may describe later gates as pending at their publication date; use the linked subsequent results for their status, and current source for implemented behavior.
+
+The [2026-10-11 handoff documentation review](../archive/research/handoff-documentation-review-2026-10-11.md) records the current local regression/fixture and retained IIS reruns, their scope and the documentation corrections prepared for the PR to `main`.

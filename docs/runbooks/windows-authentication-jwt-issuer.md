@@ -6,7 +6,7 @@ Primary-source research: [.NET 10 Identity and SQL Server](../../archive/researc
 
 ## Project creation and reproducible build
 
-The delivered prototype is [src/IdentityIssuer](../../src/IdentityIssuer/IdentityIssuer.csproj) on `develop`. With the existing .NET 10 SDK, restore and build that source:
+The delivered prototype is [src/IdentityIssuer](../../src/IdentityIssuer/IdentityIssuer.csproj) in this checkout. With the existing .NET 10 SDK, restore and build that source:
 
 ```powershell
 dotnet restore src/IdentityIssuer/IdentityIssuer.csproj
