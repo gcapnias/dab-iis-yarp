@@ -180,5 +180,6 @@
   "workbench.colorCustomizations": {
     "terminal.background": "#0c0c0c",
     "terminal.foreground": "#cccccc"
-  }
+  },
+  "search.useIgnoreFiles": false
 }
