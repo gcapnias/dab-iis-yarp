@@ -41,12 +41,19 @@ Restart W3SVC after installation and verify both runtimes and `AspNetCoreModuleV
 
 ## Publish and configure
 
-Publish both projects from the exact reviewed source revision into ignored local staging directories:
+Publish both projects from the exact reviewed source revision into fresh staging directories. Keep API staging under ignored `.scratch` storage; the issuer publisher requires its destination to remain outside the source checkout:
 
 ```powershell
-dotnet publish src/IdentityIssuer/IdentityIssuer.csproj -c Release --no-self-contained -o .scratch/ws2025s01/publish/issuer
-dotnet publish src/EmbeddedDab/EmbeddedDab.csproj -c Release --no-self-contained -o .scratch/ws2025s01/publish/api
+$PublishId = [guid]::NewGuid().ToString('N')
+$IssuerPublish = Join-Path $env:TEMP "dab-iis-issuer-$PublishId"
+$ApiPublish = ".scratch/ws2025s01/publish-$PublishId/api"
+pwsh -NoProfile -File scripts/publish-identity-issuer.ps1 -OutputDirectory $IssuerPublish
+if ($LASTEXITCODE -ne 0) { throw 'Issuer package validation failed.' }
+pwsh -NoProfile -File scripts/publish-embedded-dab.ps1 -OutputDirectory $ApiPublish
+if ($LASTEXITCODE -ne 0) { throw 'API package validation failed.' }
 ```
+
+Both supported publishers reject nonempty destinations before publishing, validate the generated framework-dependent IIS package and scan all files, including hidden files, for supported private-key PEM markers or blocked key-container extensions. Keep any failed or partial output untouched and use a new empty destination to retry. The scan cannot detect arbitrary encoded or embedded secrets. Provision issuer keys separately in the protected server key directory described below.
 
 Verify SDK-generated `web.config` has `hostingModel="inprocess"` and `inheritInChildApplications="false"`. Set `ASPNETCORE_ENVIRONMENT=Development` for this proof and `DAB_INITIALIZE=true` for the API. Production deployment requires a different configuration and acceptance process.
 

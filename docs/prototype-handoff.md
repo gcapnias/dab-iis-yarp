@@ -129,14 +129,19 @@ dotnet test tests/EmbeddedDab.Tests/EmbeddedDab.Tests.csproj -c Release --filter
 
 The filtered DAB command runs the three tests that do not require SQL. The current test runner reports the SQL-backed tests' intended dynamic skip as a failure when `DAB_ENV_FILE` or `DAB_FIXTURE_DATABASE` is absent; do not use an unfiltered standalone run as the database-free baseline. For the full 13-test suite, use `pwsh -NoProfile -File scripts/test-embedded-dab-jwt.ps1 -DotEnvFile <absolute-fixture-env-path>` with an authorized fixture connection. That harness supplies the fixture inputs and removes its generated database afterward. A filtered test pass does not establish SQL integration coverage.
 
-For framework-dependent delivery, publish both projects into separate staging folders:
+For framework-dependent delivery, publish both projects into fresh staging folders. Use a unique API destination under ignored `.scratch` storage and an issuer destination outside the source checkout:
 
 ```powershell
-dotnet publish src/IdentityIssuer/IdentityIssuer.csproj -c Release --no-self-contained -o .scratch/delivery/issuer
-dotnet publish src/EmbeddedDab/EmbeddedDab.csproj -c Release --no-self-contained -o .scratch/delivery/api
+$DeliveryId = [guid]::NewGuid().ToString('N')
+$IssuerOutput = Join-Path $env:TEMP "dab-issuer-$DeliveryId"
+$ApiOutput = ".scratch/delivery-$DeliveryId/api"
+pwsh -NoProfile -File scripts/publish-identity-issuer.ps1 -OutputDirectory $IssuerOutput
+if ($LASTEXITCODE -ne 0) { throw 'Issuer package validation failed.' }
+pwsh -NoProfile -File scripts/publish-embedded-dab.ps1 -OutputDirectory $ApiOutput
+if ($LASTEXITCODE -ne 0) { throw 'API package validation failed.' }
 ```
 
-Keep the source revision, this guide, linked runbooks, configuration examples, migrations and verification scripts available to the recipient. Supply environment-specific credentials, keys and certificates through the protected setup procedure. The [clean-install guide](runbooks/windows-server-2025-clean-install.md) covers the runtime/ANCM prerequisites, generated `web.config`, application boundaries and ACLs. `.scratch` staging output is temporary and gitignored.
+Both publishers reject nonempty destinations before invoking `dotnet publish`, then require SDK-generated `web.config`, framework-dependent runtime configuration and a successful supported private-key scan. Failed or partial output is left in place; retry with another unique empty destination. The scan rejects PKCS#8, encrypted PKCS#8, RSA, EC, DSA and OpenSSH PEM private-key blocks, plus `.pfx`, `.p12`, `.snk` and `.key` files. Public-key PEM and certificate files alone pass. This bounded scan does not detect arbitrary encoded or embedded secrets. Keep private keys and environment credentials separate from the packages and provision them through the protected operator procedure. Keep the source revision, this guide, linked runbooks, configuration examples, migrations and verification scripts available to the recipient. The [clean-install guide](runbooks/windows-server-2025-clean-install.md) covers runtime/ANCM prerequisites, generated `web.config`, application boundaries and ACLs. API `.scratch` staging is temporary and gitignored.
 
 Choose verification matching your changes:
 
