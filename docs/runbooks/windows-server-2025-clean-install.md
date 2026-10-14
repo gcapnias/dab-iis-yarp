@@ -73,7 +73,7 @@ Create a fresh staging directory and administrator remoting credential:
 # Workstation
 $ErrorActionPreference = 'Stop'
 $ServerDns = 'ws2025s01.mshome.net' # Replace throughout with the new DNS name
-$Stage = Join-Path (Get-Location) ('.scratch/deploy-' + [guid]::NewGuid().ToString('N'))
+$Stage = Join-Path $env:TEMP ('dab-iis-deploy-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $Stage | Out-Null
 $AdminCredential = Get-Credential -Message 'New server administrator: SERVER\Administrator'
 $Session = New-PSSession -ComputerName $ServerDns -Credential $AdminCredential
@@ -182,10 +182,10 @@ If IIS was installed after the bundle, rerun/repair the bundle before proceeding
 
 ```powershell
 # Workstation, PowerShell 7, repository root; $Stage/$Session from step 2
-dotnet publish src/IdentityIssuer/IdentityIssuer.csproj -c Release --no-self-contained -o "$Stage/issuer"
-if ($LASTEXITCODE -ne 0) { throw 'Issuer publish failed.' }
-dotnet publish src/EmbeddedDab/EmbeddedDab.csproj -c Release --no-self-contained -o "$Stage/api"
-if ($LASTEXITCODE -ne 0) { throw 'API publish failed.' }
+pwsh -NoProfile -File scripts/publish-identity-issuer.ps1 -OutputDirectory "$Stage/issuer"
+if ($LASTEXITCODE -ne 0) { throw 'Issuer package validation failed.' }
+pwsh -NoProfile -File scripts/publish-embedded-dab.ps1 -OutputDirectory "$Stage/api"
+if ($LASTEXITCODE -ne 0) { throw 'API package validation failed.' }
 New-Item -ItemType Directory "$Stage/keys" | Out-Null
 # Protect local private-key staging before creating keys.
 $operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -207,7 +207,7 @@ Copy-Item "$Stage/source-commit.txt" -Destination 'C:\DabIisProof\evidence\sourc
 
 Keep staging private; it contains proof signing keys used by the negative-token verifier later. Generate fresh keys per installation. Windows PowerShell 5.1 cannot call `ExportPkcs8PrivateKeyPem`; that is why key generation runs on workstation PowerShell 7. The certificate for HTTPS is generated separately on the server, with a non-exportable private key.
 
-Publishing restores all NuGet components; nothing needs a separate DAB installer. The issuer uses .NET/EF/Negotiate **10.0.12** and OpenIddict **7.7.1**. Embedded DAB uses Core **2.0.12**, Azure.Security.KeyVault.Secrets **4.6.0**, OpenTelemetry.Exporter.OpenTelemetryProtocol **1.15.3**, Serilog.Sinks.File **7.0.0**, Humanizer.Core **2.14.1**. The project files are the authoritative package pins.
+Each publisher requires its destination to be absent or empty, validates SDK-generated `web.config`, framework-dependent runtime configuration and scans for supported private-key PEM markers and `.pfx`, `.p12`, `.snk` and `.key` files. Hidden files are included. On failure, leave any partial output untouched and retry to a new empty path. This bounded scan cannot detect arbitrary encoded or embedded secrets. The issuer and API binaries remain separate from keys created in the sibling protected `$Stage/keys` directory. Publishing restores all NuGet components; nothing needs a separate DAB installer. The issuer uses .NET/EF/Negotiate **10.0.12** and OpenIddict **7.7.1**. Embedded DAB uses Core **2.0.12**, Azure.Security.KeyVault.Secrets **4.6.0**, OpenTelemetry.Exporter.OpenTelemetryProtocol **1.15.3**, Serilog.Sinks.File **7.0.0**, Humanizer.Core **2.14.1**. The project files are the authoritative package pins.
 
 ## 6. Create pools and restrict files before adding secrets
 

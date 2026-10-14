@@ -32,14 +32,19 @@ dotnet test tests/EmbeddedDab.Tests/EmbeddedDab.Tests.csproj -c Release --filter
 
 For SQL-backed API/JWT checks, use the [fixture verification instructions](docs/prototype-handoff.md#build-package-and-verify-a-customized-copy) with an authorized fixture connection. Those harnesses create and remove isolated databases; the filtered command above does not establish SQL integration coverage. For deployed IIS verification, use the retained-state procedure rather than the localhost launcher.
 
-Create separate framework-dependent application packages:
+Create separate framework-dependent application packages in unique, empty staging directories:
 
 ```powershell
-dotnet publish src/IdentityIssuer/IdentityIssuer.csproj -c Release --no-self-contained -o .scratch/delivery/issuer
-dotnet publish src/EmbeddedDab/EmbeddedDab.csproj -c Release --no-self-contained -o .scratch/delivery/api
+$DeliveryId = [guid]::NewGuid().ToString('N')
+$IssuerOutput = Join-Path $env:TEMP "dab-issuer-$DeliveryId"
+$ApiOutput = ".scratch/delivery-$DeliveryId/api"
+pwsh -NoProfile -File scripts/publish-identity-issuer.ps1 -OutputDirectory $IssuerOutput
+if ($LASTEXITCODE -ne 0) { throw 'Issuer package validation failed.' }
+pwsh -NoProfile -File scripts/publish-embedded-dab.ps1 -OutputDirectory $ApiOutput
+if ($LASTEXITCODE -ne 0) { throw 'API package validation failed.' }
 ```
 
-Deliver both publish folders alongside the source revision, [handoff guide](docs/prototype-handoff.md), runbooks, configuration examples, migrations and verification scripts. Provision private credentials, keys and certificates separately through the protected setup procedure. `.scratch/delivery` is temporary, gitignored staging space; copy the delivery to its intended destination when prepared. Server runtime installation and IIS configuration are covered by the clean-install procedure.
+Each publisher rejects a nonempty destination before publish and validates the generated `web.config`, framework-dependent runtime configuration and package contents. If publishing or validation fails, leave that partial output untouched and use a different empty path for a retry. The scan rejects supported PEM private-key blocks and `.pfx`, `.p12`, `.snk` and `.key` files; arbitrary encoded or embedded secrets are outside its detection limits. Provision private credentials, keys and certificates separately through the protected setup procedure. The API output uses ignored `.scratch` staging; the issuer output is outside the source checkout as required by its publisher. Copy both validated publish folders alongside the source revision, [handoff guide](docs/prototype-handoff.md), runbooks, configuration examples, migrations and verification scripts. Server runtime installation and IIS configuration are covered by the clean-install procedure.
 
 ## Verified scope
 
