@@ -117,7 +117,7 @@ try {
         foreach ($key in $parsedResult.Keys) { $result[$key] = $parsedResult[$key] }
     }
     catch {
-        throw $runnerFailures.MissingResult
+        throw 'browser_runner_runtime_error'
     }
 }
 catch {

@@ -127,6 +127,16 @@ function Get-BrowserScratchCanonicalPath {
     $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
+function Test-BrowserScratchSystemVolumeRoot {
+    param([Parameter(Mandatory)][string]$PathRoot)
+
+    $systemRoot = [IO.Path]::GetPathRoot([Environment]::SystemDirectory)
+    [string]::Equals(
+        (Get-BrowserScratchCanonicalPath $PathRoot),
+        (Get-BrowserScratchCanonicalPath $systemRoot),
+        [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Get-BrowserScratchPathComponents {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -175,8 +185,9 @@ function Test-BrowserScratchComponentPolicy {
     $entry = Get-BrowserScratchSecurityDescriptor $Path
     if (-not $entry.Item.PSIsContainer) { throw 'scratch_path_unavailable' }
     $isVolumeRoot = [string]::Equals((Get-BrowserScratchCanonicalPath $Path), (Get-BrowserScratchCanonicalPath $PathRoot), [StringComparison]::OrdinalIgnoreCase)
+    $isSystemVolumeRoot = $isVolumeRoot -and (Test-BrowserScratchSystemVolumeRoot -PathRoot $PathRoot)
     $permittedOwnerSids = @($script:BrowserScratchTrustedOwners)
-    if ($isVolumeRoot -and $script:BrowserScratchTrustedInstallerSid) {
+    if ($isSystemVolumeRoot -and $script:BrowserScratchTrustedInstallerSid) {
         $permittedOwnerSids += $script:BrowserScratchTrustedInstallerSid
     }
     if ($entry.OwnerSid -notin $permittedOwnerSids) {
@@ -202,7 +213,7 @@ function Test-BrowserScratchComponentPolicy {
         if (-not $mayControl) { continue }
 
         $permittedControlSids = @($script:BrowserScratchTrustedOwners)
-        if ($isVolumeRoot -and $script:BrowserScratchTrustedInstallerSid) {
+        if ($isSystemVolumeRoot -and $script:BrowserScratchTrustedInstallerSid) {
             $permittedControlSids += $script:BrowserScratchTrustedInstallerSid
         }
         if ($sid -notin $permittedControlSids) {

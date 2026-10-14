@@ -294,7 +294,7 @@ if ($verb -eq 'open') {
 if ($verb -eq 'run-code') {
     if ($mode -contains 'run-fail') { $global:LASTEXITCODE = 1; return }
     if ($mode -contains 'missing-result') { Write-Output 'stub completed without result'; $global:LASTEXITCODE = 0; return }
-    if ($mode -contains 'malformed-result') { Write-Output 'DAB_ISSUER_BROWSER_RESULT:{malformed'; $global:LASTEXITCODE = 0; return }
+    if ($mode -contains 'malformed-result') { Write-Output 'DAB_ISSUER_BROWSER_RESULT:{malformed}'; $global:LASTEXITCODE = 0; return }
     Write-Output 'DAB_ISSUER_BROWSER_RESULT:{"passed":true,"fixture":true}'
     $global:LASTEXITCODE = 0
     return
@@ -345,15 +345,48 @@ $global:LASTEXITCODE = 2
     Assert-That $directCleanup.Success 'verified helper fixture did not clean up'
     $report.Add('actual_run_and_child_acl=fullcontrol_approved_sids_inherited_from_protected_directory')
 
-    # The executing checkout is deliberately a negative boundary; it remains unchanged.
+    # The negative trust-boundary case is an explicitly unsafe fixture, independent of checkout ACLs.
+    $negativeRoot = Join-Path $fixtureRoot 'negative-checkout'
+    $negativeScripts = Join-Path $negativeRoot 'scripts'
+    $negativeRequests = Join-Path $negativeRoot 'requests'
+    $negativeScratchBase = Join-Path $negativeRoot '.scratch/identity-issuer'
+    foreach ($directory in @($negativeScripts, $negativeRequests, $negativeScratchBase)) {
+        $null = [IO.Directory]::CreateDirectory($directory)
+    }
+    foreach ($name in @('ProtectedBrowserScratch.ps1', 'test-dab-issuer-browser.ps1', 'dab-issuer-browser-check.js', 'dab-northwind-browser-check.js')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $negativeScripts $name)
+    }
+    Copy-Item -LiteralPath (Join-Path $repo 'requests/playwright-cli.iis-test.config.json') -Destination (Join-Path $negativeRequests 'playwright-cli.iis-test.config.json')
+    Set-Content -LiteralPath (Join-Path $negativeRoot '.gitignore') -Value '.scratch/' -NoNewline
+    $null = git -C $negativeRoot init --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'negative fixture git initialization failed' }
+    Add-TestAllowRule -Path $negativeScratchBase -Sid 'S-1-5-11' -Rights ([Security.AccessControl.FileSystemRights]::Modify)
     $negativeControl = Join-Path $fixtureRoot 'negative-control.json'
-    $negative = Invoke-Verifier -FixtureRoot $repo -StubDirectory $stubDirectory -Mode 'success' -ControlPath $negativeControl -CredentialPath (Join-Path $fixtureRoot 'missing-credential-marker.xml')
+    $negative = Invoke-Verifier -FixtureRoot $negativeRoot -StubDirectory $stubDirectory -Mode 'success' -ControlPath $negativeControl -CredentialPath (Join-Path $fixtureRoot 'missing-credential-marker.xml')
     $negativeResult = Assert-SingleJsonResult $negative
-    Assert-That ($negative.ExitCode -eq 1 -and $negativeResult.failure -eq 'browser_setup_failed') 'shared checkout did not fail closed'
-    Assert-That ($negative.Stderr -match 'setup_stage=gitignore_check') 'shared checkout did not fail before credential import'
-    Assert-NoSensitiveOutput -Run $negative -Marker $credentialMarker -FixtureRoot $fixtureRoot
-    Assert-That (-not (Test-Path -LiteralPath $negativeControl)) 'runner was invoked for the untrusted shared checkout'
-    $report.Add('shared_checkout=failed_closed_before_runner_or_credential_import')
+    Assert-That ($negative.ExitCode -eq 1 -and $negativeResult.failure -eq 'browser_setup_failed') 'explicit unsafe fixture did not fail closed'
+    Assert-That ($negative.Stderr -match 'setup_stage=gitignore_check') 'explicit unsafe fixture did not fail before credential import'
+    Assert-NoSensitiveOutput -Run $negative -Marker $credentialMarker -FixtureRoot $negativeRoot
+    Assert-That (-not (Test-Path -LiteralPath $negativeControl)) 'runner was invoked for the explicitly unsafe fixture'
+
+    # Also observe the real checkout without assuming its ACL state is immutable across machines.
+    $sharedScratch = Join-Path $repo '.scratch/identity-issuer'
+    $sharedBoundaryFailure = $null
+    try { $null = Test-ProtectedBrowserScratchBoundary -Path $sharedScratch -IncludeLeafDeleteChild } catch { $sharedBoundaryFailure = $_.Exception.Message }
+    $sharedControl = Join-Path $fixtureRoot 'shared-checkout-control.json'
+    $sharedProbe = Invoke-Verifier -FixtureRoot $repo -StubDirectory $stubDirectory -Mode 'success' -ControlPath $sharedControl -CredentialPath (Join-Path $fixtureRoot 'missing-credential-marker.xml')
+    $sharedProbeResult = Assert-SingleJsonResult $sharedProbe
+    Assert-That ($sharedProbe.ExitCode -eq 1 -and $sharedProbeResult.failure -eq 'browser_setup_failed') 'shared checkout probe did not fail safely before runner invocation'
+    Assert-NoSensitiveOutput -Run $sharedProbe -Marker $credentialMarker -FixtureRoot $repo
+    Assert-That (-not (Test-Path -LiteralPath $sharedControl)) 'runner was invoked for the shared checkout probe'
+    if ($sharedBoundaryFailure) {
+        Assert-That ($sharedProbe.Stderr -match 'setup_stage=gitignore_check') 'untrusted shared checkout proceeded beyond boundary setup'
+        $report.Add('shared_checkout=observed_untrusted_failed_before_credential_import')
+    } else {
+        Assert-That ($sharedProbe.Stderr -match 'setup_stage=credential_import') 'trusted shared checkout probe failed at an unexpected stage'
+        $report.Add('shared_checkout=observed_trusted_probe_stopped_at_synthetic_credential_import')
+    }
+    $report.Add('explicit_unsafe_fixture=failed_before_credential_import_or_browser_invocation')
 
     foreach ($variant in @(
         @{ Name = 'default_with_credential'; Mode = 'success'; Credential = $credentialFile; Northwind = $false },
@@ -441,8 +474,12 @@ $global:LASTEXITCODE = 2
             Assert-That ($run.ExitCode -eq 1 -and $result.failure -eq 'playwright_open_failed') 'open failure code was not preserved'
         } elseif ($mode -eq 'run-fail') {
             Assert-That ($run.ExitCode -eq 1 -and $result.failure -eq 'playwright_run_code_failed') 'run-code failure code was not preserved'
+        } elseif ($mode -eq 'malformed-result') {
+            Assert-That ($run.ExitCode -eq 1 -and $result.failure -eq 'browser_runner_runtime_error') 'malformed result did not preserve the runner runtime failure code'
+        } elseif ($mode -eq 'missing-result') {
+            Assert-That ($run.ExitCode -eq 1 -and $result.failure -eq 'playwright_result_missing') 'missing result failure code mismatch'
         } else {
-            Assert-That ($run.ExitCode -eq 1 -and $result.failure -eq 'playwright_result_missing') 'missing or malformed result code mismatch'
+            throw 'unexpected runner/cleanup test mode'
         }
         $generated = Get-ControlledRunDirectory -ControlPath $control -FixtureRoot $fixtureRoot
         if ($mode -eq 'unsafe-cleanup' -or $mode -eq 'run-fail,unsafe-cleanup' -or $mode -eq 'close-fail,unsafe-cleanup') {
@@ -539,11 +576,14 @@ $global:LASTEXITCODE = 2
     Remove-Item -LiteralPath $terminatedResult.RunDirectory -Recurse -Force
     $report.Add('abrupt_worker_termination=retained_config_acl_verified_then_fixture_cleaned')
 
-    $volumeRoot = [IO.Path]::GetPathRoot($profileRoot)
+    $volumeRoot = [IO.Path]::GetPathRoot([Environment]::SystemDirectory)
+    $otherVolumeRoot = if ([string]::Equals($volumeRoot, 'Z:\', [StringComparison]::OrdinalIgnoreCase)) { 'Y:\' } else { 'Z:\' }
+    Assert-That (Test-BrowserScratchSystemVolumeRoot -PathRoot $volumeRoot) 'Windows system volume root was not identified'
+    Assert-That (-not (Test-BrowserScratchSystemVolumeRoot -PathRoot $otherVolumeRoot)) 'TrustedInstaller exception predicate accepted a non-system volume root'
     $volumeAcl = Get-Acl -LiteralPath $volumeRoot
     $volumeOwner = $volumeAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value
     if ($volumeOwner -eq $trustedInstallerSid) {
-        Assert-That (Test-ProtectedBrowserScratchBoundary -Path $profileRoot) 'TrustedInstaller system-volume-root owner was not accepted'
+        Assert-That (Test-ProtectedBrowserScratchBoundary -Path $volumeRoot) 'TrustedInstaller system-volume-root owner was not accepted'
         $report.Add('trustedinstaller_system_volume_root=actual_owner_case_passed')
     } else {
         $report.Add('trustedinstaller_system_volume_root=not-present_on_executing_volume')
