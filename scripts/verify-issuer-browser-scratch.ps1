@@ -36,13 +36,16 @@ function Add-TestAllowRule([string]$Path, [string]$Sid, [Security.AccessControl.
 function Assert-ActualAcl([string]$Path, [switch]$Directory) {
     $acl = Get-Acl -LiteralPath $Path
     $allowed = @('S-1-5-18', 'S-1-5-32-544', [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
-    Assert-That ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -in $allowed) 'generated artifact has an unapproved owner'
+    $allowed = @($allowed | Sort-Object -Unique)
+    Assert-That ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) 'generated artifact owner is not the operator'
     if ($Directory) { Assert-That $acl.AreAccessRulesProtected 'run directory inherits its DACL' }
-    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
-        if ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow) {
-            Assert-That ($rule.IdentityReference.Value -in $allowed) 'generated artifact has an unapproved allow SID'
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $allowRules = @($rules | Where-Object AccessControlType -eq Allow)
+    $allowSids = @($allowRules | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+    Assert-That (($allowSids -join ',') -eq ($allowed -join ',')) 'generated artifact does not have exactly the approved three allow SIDs'
+    foreach ($rule in $allowRules) {
+            Assert-That ($rule.FileSystemRights -eq [Security.AccessControl.FileSystemRights]::FullControl) 'generated artifact allow grant is not FullControl'
             if (-not $Directory) { Assert-That $rule.IsInherited 'artifact ACL grant is not inherited from its run directory' }
-        }
     }
 }
 
@@ -164,6 +167,9 @@ if ($verb -eq 'open') {
     $actualAllowed = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
     $actualChildAllowed = @($childAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
     $actualConfigAllowed = @($configAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+    $runRules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow)
+    $childRules = @($childAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow)
+    $configRules = @($configAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow)
     $expectedPassword = if ($config.browser.contextOptions.Contains('httpCredentials')) { $config.browser.contextOptions.httpCredentials.password -eq $env:ISSUER_STUB_SECRET } else { $false }
     $control = @{
         ConfigPath = $configPath; RunDirectory = $runDirectory; CodePath = $codePath; Config = $config
@@ -173,6 +179,9 @@ if ($verb -eq 'open') {
         ChildInherited = (@($childAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow | Where-Object { -not $_.IsInherited }).Count -eq 0)
         ConfigAllowed = $actualConfigAllowed; ConfigOwner = $configAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value
         ConfigInherited = (@($configAcl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object AccessControlType -eq Allow | Where-Object { -not $_.IsInherited }).Count -eq 0)
+        RunFullControl = (@($runRules | Where-Object { $_.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl }).Count -eq 0)
+        ChildFullControl = (@($childRules | Where-Object { $_.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl }).Count -eq 0)
+        ConfigFullControl = (@($configRules | Where-Object { $_.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl }).Count -eq 0)
         MetadataUrl = [string]($Arguments[-1]);
     }
     $control | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $env:ISSUER_STUB_CONTROL -NoNewline
@@ -229,13 +238,16 @@ $global:LASTEXITCODE = 2
         $control = Get-Content -LiteralPath $controlPath -Raw | ConvertFrom-Json -AsHashtable
         $operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         Assert-That ($control.RunProtected -and $control.RunOwner -eq $operatorSid) 'actual run ACL lacks protected inheritance or operator owner'
-        Assert-That (@($control.RunAllowed | Where-Object { $_ -notin @($operatorSid, 'S-1-5-18', 'S-1-5-32-544') }).Count -eq 0) 'actual run ACL includes an unapproved allow SID'
-        Assert-That (@($control.ChildAllowed | Where-Object { $_ -notin @($operatorSid, 'S-1-5-18', 'S-1-5-32-544') }).Count -eq 0) 'actual artifact ACL includes an unapproved allow SID'
+        $expectedAllowSids = @('S-1-5-18', 'S-1-5-32-544', $operatorSid)
+        $expectedAllowSids = @($expectedAllowSids | Sort-Object -Unique)
+        Assert-That (($control.RunAllowed -join ',') -eq ($expectedAllowSids -join ',')) 'actual run ACL does not contain exactly the approved three allow SIDs'
+        Assert-That (($control.ChildAllowed -join ',') -eq ($expectedAllowSids -join ',')) 'actual source ACL does not contain exactly the approved three allow SIDs'
         Assert-That ($control.ChildOwner -eq $operatorSid) 'actual artifact owner is not the operator'
         Assert-That $control.ChildInherited 'source ACL grants were not inherited'
         Assert-That $control.ConfigInherited 'config ACL grants were not inherited'
         Assert-That ($control.ConfigOwner -eq $operatorSid) 'actual config owner is not the operator'
-        Assert-That (@($control.ConfigAllowed | Where-Object { $_ -notin @($operatorSid, 'S-1-5-18', 'S-1-5-32-544') }).Count -eq 0) 'actual config ACL includes an unapproved allow SID'
+        Assert-That (($control.ConfigAllowed -join ',') -eq ($expectedAllowSids -join ',')) 'actual config ACL does not contain exactly the approved three allow SIDs'
+        Assert-That ($control.RunFullControl -and $control.ChildFullControl -and $control.ConfigFullControl) 'actual ACLs do not grant FullControl to every approved SID'
         Assert-That ($control.PasswordMatched -eq [bool]$variant.Credential) 'synthetic credential import/serialization did not match the selected variant'
         Assert-That ((Test-Path -LiteralPath ($controlPath + '.import-called')) -eq [bool]$variant.Credential) 'credential import ordering did not match the selected variant'
         if ($variant.Credential) { Assert-That ($control.Config.browser.contextOptions.httpCredentials.username -eq 'synthetic-browser-user' -and $control.Config.browser.contextOptions.httpCredentials.username -ne [Security.Principal.WindowsIdentity]::GetCurrent().Name) 'imported credential incorrectly defined the executing operator identity' }
@@ -285,6 +297,20 @@ $global:LASTEXITCODE = 2
     Assert-Sanitized $negativeRun $script:secretMarker $negativeRoot
     $report.Add('untrusted_mutation_grant=actual_fixture_acl_rejected_before_import')
 
+    # Simulate the helper's actual untrusted-owner decision; changing an existing owner needs SeSecurityPrivilege on this workstation.
+    $ownerHelperPath = Join-Path $scripts 'ProtectedBrowserScratch.ps1'
+    $ownerHelperBackup = $ownerHelperPath + '.held'
+    Move-Item -LiteralPath $ownerHelperPath -Destination $ownerHelperBackup
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $ownerHelperPath
+    Add-Content -LiteralPath $ownerHelperPath -Value "`nfunction New-ProtectedBrowserScratchDirectory { throw 'scratch_path_untrusted_owner' }"
+    $ownerControl = Join-Path $fixture 'untrusted-owner.json'
+    try { $ownerRun = Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $ownerControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback' }
+    finally { Move-Item -LiteralPath $ownerHelperBackup -Destination $ownerHelperPath -Force }
+    $ownerResult = Assert-SingleResult $ownerRun
+    Assert-That ($ownerRun.ExitCode -eq 1 -and $ownerResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ($ownerControl + '.import-called')) -and -not (Test-Path -LiteralPath $ownerControl)) 'untrusted-owner helper failure reached credential import or runner invocation'
+    Assert-Sanitized $ownerRun $script:secretMarker $fixture
+    $report.Add('untrusted_owner_helper_failure=failed_before_import; actual_owner_mutation_unavailable')
+
     # A reparse-point scratch base is rejected at the issuer integration boundary.
     $reparseRoot = Join-Path $fixture 'reparse-checkout'
     $null = [IO.Directory]::CreateDirectory((Join-Path $reparseRoot 'scripts'))
@@ -314,6 +340,17 @@ $global:LASTEXITCODE = 2
     $collisionResult = Assert-SingleResult $collisionRun
     Assert-That ($collisionRun.ExitCode -eq 1 -and $collisionResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ((Join-Path $fixture 'helper-collision.json') + '.import-called')) -and -not (Test-Path -LiteralPath (Join-Path $fixture 'helper-collision.json'))) 'helper collision failure reached credential import or runner invocation'
     $report.Add('helper_collision_failure=setup_result_without_import_or_runner')
+
+    Move-Item -LiteralPath $helperPath -Destination $helperBackup
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $helperPath
+    Add-Content -LiteralPath $helperPath -Value "`nfunction Get-BrowserScratchSecurityDescriptor { throw 'scratch_path_unavailable' }"
+    $inspectionControl = Join-Path $fixture 'helper-inspection-unavailable.json'
+    try { $inspectionRun = Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $inspectionControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback' }
+    finally { Move-Item -LiteralPath $helperBackup -Destination $helperPath -Force }
+    $inspectionResult = Assert-SingleResult $inspectionRun
+    Assert-That ($inspectionRun.ExitCode -eq 1 -and $inspectionResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ($inspectionControl + '.import-called')) -and -not (Test-Path -LiteralPath $inspectionControl)) 'unavailable security-descriptor inspection reached credential import or runner invocation'
+    Assert-Sanitized $inspectionRun $script:secretMarker $fixture
+    $report.Add('unavailable_acl_inspection=helper_failure_rejected_before_import')
 
     # If the helper unexpectedly throws while deleting, preserve one JSON result and report unknown artifacts as retained.
     Move-Item -LiteralPath $helperPath -Destination $helperBackup
