@@ -28,4 +28,18 @@ The PowerShell 7 run on 2026-10-14 passed the actual profile-fixture run and chi
 
 ## Issuer verifier follow-up
 
-Issue #21 owns this helper and the DAB verifier integration. Issue #22 is the separate issuer-verifier integration and depends on #21. The issuer verifier can reuse the same three entry points, but it retains its own credential setup, issuer/OIDC behavior, cleanup handling and acceptance tests. #21's offline DAB results do not establish #22's issuer behavior.
+Issue #21 owns this helper and the DAB verifier integration. Issue #22 integrates the issuer IIS verifier separately, using the same three helper entry points while retaining its issuer/OIDC behavior.
+
+Run the issuer-specific offline integration verification from the repository with PowerShell 7 on Windows:
+
+```powershell
+pwsh -NoProfile -File scripts/verify-issuer-browser-scratch.ps1
+```
+
+This entry point creates one unique fixture directly beneath the independently checked operator profile root, protects only that new fixture, and removes it in `finally`. It exports and imports a synthetic `PSCredential`, wraps `Import-Clixml` in the child process to prove the shared-checkout and untrusted-base cases stop before import, and shadows the Edge executable paths and `playwright-cli` with fixture-local stubs. The runner stub records the actual ACLs of the generated directory, source and config while they exist. The checks cover credential and no-credential runs, root and issuer-subpath callback URLs, default/custom cookie options, certificate validation, invalid URLs, broad-mutation and junction boundaries, helper-collision and throwing-helper cases, template/config/credential/write failures, runner/result/browser-close failures, actual deletion failure, unsafe cleanup retention, and controlled worker termination. It makes no browser launch or network request and installs no prerequisite.
+
+On 2026-10-15, the issuer-specific fixture passed on Windows PowerShell 7. It observed the operator as owner, a protected run-directory DACL, only operator/SYSTEM/Administrators allow SIDs on generated files, inherited file grants, no credential import before a rejected boundary, safe cleanup after catchable failures, bounded cleanup diagnostics, and protected retained files after abrupt termination. The existing DAB fixture remains the source for the helper's detailed effective-rights, owner, collision, unavailable-inspection and TrustedInstaller boundary matrix; rerun it independently with `pwsh -NoProfile -File scripts/verify-dab-browser-scratch.ps1` after issuer changes.
+
+The DAB fixture was rerun on 2026-10-15 after this issuer integration and passed its four credential/Northwind variants, setup and runner/cleanup matrices, broad-grant and parent-delete-child checks, reparse/unavailable/collision cases, actual untrusted-owner and TrustedInstaller-root checks, and retained ACL inspection after abrupt termination.
+
+These checks establish local Windows ACL and process-lifecycle behavior for the executing operator. They do not establish cross-account access behavior, live browser behavior, issuer availability, or access by approved administrators and SYSTEM. Fixture ACL modifications are confined to its unique profile-root child; the existing checkout and its ancestors are never repaired or relocated.
