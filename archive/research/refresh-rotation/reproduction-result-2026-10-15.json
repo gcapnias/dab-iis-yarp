@@ -1,0 +1,138 @@
+{
+  "databaseExecutionPerformed": true,
+  "server": "vs2026",
+  "fixtureDatabase": "dab_ticket25_f495883a4274",
+  "sourceRevision": "04e5dc5463fefe29d6c4a66cddcf89a2050edc87",
+  "sqlConfiguration": {
+    "productVersion": "17.0.5015.4",
+    "compatibilityLevel": 170,
+    "readCommittedSnapshot": false,
+    "snapshotIsolation": "OFF",
+    "serviceIsolation": "Serializable",
+    "retriesEnabled": false
+  },
+  "sequentialControl": {
+    "rotation": "Rotated",
+    "replay": "ReplayDetected",
+    "state": {
+      "Total": 2,
+      "Consumed": 1,
+      "Revoked": 2,
+      "Unrevoked": 0,
+      "UnrevokedReplacements": 0
+    }
+  },
+  "races": [
+    {
+      "Iteration": 1,
+      "FirstSqlSession": 89,
+      "SecondSqlSession": 98,
+      "BarrierArrivals": 2,
+      "Actors": [
+        {
+          "Status": "Rotated",
+          "Exception": null,
+          "CanceledOrTimedOut": false
+        },
+        {
+          "Status": null,
+          "Exception": {
+            "types": [
+              "InvalidOperationException",
+              "DbUpdateException",
+              "SqlException"
+            ],
+            "sqlErrorNumbers": [
+              1205
+            ]
+          },
+          "CanceledOrTimedOut": false
+        }
+      ],
+      "FinalFamilyState": {
+        "Total": 2,
+        "Consumed": 1,
+        "Revoked": 0,
+        "Unrevoked": 2,
+        "UnrevokedReplacements": 1
+      },
+      "Inconclusive": false,
+      "ContractSatisfied": false
+    },
+    {
+      "Iteration": 2,
+      "FirstSqlSession": 89,
+      "SecondSqlSession": 98,
+      "BarrierArrivals": 2,
+      "Actors": [
+        {
+          "Status": "Rotated",
+          "Exception": null,
+          "CanceledOrTimedOut": false
+        },
+        {
+          "Status": null,
+          "Exception": {
+            "types": [
+              "InvalidOperationException",
+              "DbUpdateException",
+              "SqlException"
+            ],
+            "sqlErrorNumbers": [
+              1205
+            ]
+          },
+          "CanceledOrTimedOut": false
+        }
+      ],
+      "FinalFamilyState": {
+        "Total": 2,
+        "Consumed": 1,
+        "Revoked": 0,
+        "Unrevoked": 2,
+        "UnrevokedReplacements": 1
+      },
+      "Inconclusive": false,
+      "ContractSatisfied": false
+    },
+    {
+      "Iteration": 3,
+      "FirstSqlSession": 88,
+      "SecondSqlSession": 89,
+      "BarrierArrivals": 2,
+      "Actors": [
+        {
+          "Status": null,
+          "Exception": {
+            "types": [
+              "InvalidOperationException",
+              "DbUpdateException",
+              "SqlException"
+            ],
+            "sqlErrorNumbers": [
+              1205
+            ]
+          },
+          "CanceledOrTimedOut": false
+        },
+        {
+          "Status": "Rotated",
+          "Exception": null,
+          "CanceledOrTimedOut": false
+        }
+      ],
+      "FinalFamilyState": {
+        "Total": 2,
+        "Consumed": 1,
+        "Revoked": 0,
+        "Unrevoked": 2,
+        "UnrevokedReplacements": 1
+      },
+      "Inconclusive": false,
+      "ContractSatisfied": false
+    }
+  ],
+  "verdict": "service_rotation_contract_violated",
+  "httpResponseObserved": false,
+  "fixtureCleanup": "dropped_verified_new_fixture"
+}
