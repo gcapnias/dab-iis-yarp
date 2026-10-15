@@ -40,6 +40,10 @@ _Avoid_: Caller identity, issuer account
 The person authorized to prepare the test environment and provision application identities, credentials and access boundaries. Installation authority does not make the operator the application's runtime identity or its verification caller.
 _Avoid_: Application user, administrator caller
 
+**Verification operator**:
+The operating-system identity running the issuer or DAB verification tooling, whose authority over verification artifacts is separate from the browser's supplied Windows caller credentials and the application's worker identity.
+_Avoid_: Browser caller, application-pool identity
+
 **Issuer account**:
 The locally persisted account explicitly mapped to a Windows caller, with an enabled state, profile, roles and permitted claims. A Windows identity alone does not grant issuer access.
 _Avoid_: Automatically registered user, Windows group membership
@@ -80,6 +84,14 @@ _Avoid_: Identity database, login store
 Disposable resource data explicitly authorized for verification that creates, updates or deletes records. Successful fixture mutations do not authorize writes to the separately evaluated resource store.
 _Avoid_: Northwind write proof, unrestricted test data
 
+**Browser verification artifacts**:
+Temporary configuration, source and output used by the issuer or DAB browser verifiers, which may contain the supplied browser credentials. Their protection is separate from the browser session's authentication and authorization.
+_Avoid_: Harmless test output, browser session
+
+**Protected browser scratch**:
+Temporary storage for browser verification artifacts whose location, ownership and access boundary are verified before sensitive material is written. Cleanup depends on re-establishing that boundary and the original artifact location's identity.
+_Avoid_: Gitignored directory as protection, cleanup as credential protection
+
 **Cookie session**:
 The browser's issuer-managed access and refresh credentials, separate from its cached Windows Authentication state. Browser sign-out clears those credentials; complete issuer logout additionally revokes refresh access, while copied access credentials remain valid until expiry.
 _Avoid_: Windows logon session
@@ -115,6 +127,10 @@ _Avoid_: JWT-only CSRF protection, anonymous antiforgery validation
 **Local issuer proof**:
 Evidence for the Windows caller-to-persisted-account-to-token/cookie chain on the development machine, with fixture and real-service results identified separately.
 _Avoid_: IIS proof, production readiness
+
+**Offline browser verifier proof**:
+Evidence for the issuer or DAB verifier's artifact protection and process lifecycle using synthetic credentials and a substitute browser runner. It does not establish live browser behavior or access from another operating-system account.
+_Avoid_: Live browser proof, cross-account isolation proof
 
 **Server environment evaluation**:
 Evidence that the delivered applications work in an identified Windows Server/IIS test environment, with its identities, permissions and acceptance scope stated explicitly.

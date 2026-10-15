@@ -155,6 +155,8 @@ Choose verification matching your changes:
 
 The fixture verifiers create/drop isolated databases and require a separate authorized fixture connection. They do not use the read-only Northwind runtime login for database creation. The IIS browser script's `-Northwind` switch selects the read-only path; its default mode writes disposable Widgets fixture data. Exact required tools, credentials and cleanup procedures remain in the linked runbooks.
 
+The issuer and DAB browser verifiers require a trusted checkout whose existing scratch path passes the [protected browser scratch checks](runbooks/protected-browser-scratch.md) before credential import. A broadly writable shared checkout can intentionally fail this check; the verifiers do not repair existing permissions or relocate scratch. The linked runbook explains the verification operator's separate artifact permissions, safe cleanup and the limits of offline ACL evidence.
+
 For the retained Windows Server/IIS environment, use the three commands in the [retained-server verification procedure](runbooks/windows-server-iis-evaluation.md#recover-verification-inputs-for-the-retained-server). They target the deployed issuer and `/dab` application using the existing non-administrator test caller. The localhost launcher is a separate local proof and does not verify that IIS deployment. Retained `.scratch` inputs are conveniences for this workstation; recipients obtain their own credentials and matching test key through the documented procedure.
 
 ## Recorded evidence
