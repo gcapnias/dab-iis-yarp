@@ -251,7 +251,7 @@ try {
     foreach ($directory in @($fixtureScripts, $fixtureRequests, $fixtureScratchBase, $stubDirectory)) {
         $null = [IO.Directory]::CreateDirectory($directory)
     }
-    foreach ($name in @('ProtectedBrowserScratch.ps1', 'test-dab-issuer-browser.ps1', 'dab-issuer-browser-check.js', 'dab-northwind-browser-check.js')) {
+    foreach ($name in @('ProtectedBrowserScratch.ps1', 'ProtectedBrowserRunner.ps1', 'test-dab-issuer-browser.ps1', 'dab-issuer-browser-check.js', 'dab-northwind-browser-check.js')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $fixtureScripts $name)
     }
     Copy-Item -LiteralPath (Join-Path $repo 'requests/playwright-cli.iis-test.config.json') -Destination (Join-Path $fixtureRequests 'playwright-cli.iis-test.config.json')
@@ -353,7 +353,7 @@ $global:LASTEXITCODE = 2
     foreach ($directory in @($negativeScripts, $negativeRequests, $negativeScratchBase)) {
         $null = [IO.Directory]::CreateDirectory($directory)
     }
-    foreach ($name in @('ProtectedBrowserScratch.ps1', 'test-dab-issuer-browser.ps1', 'dab-issuer-browser-check.js', 'dab-northwind-browser-check.js')) {
+    foreach ($name in @('ProtectedBrowserScratch.ps1', 'ProtectedBrowserRunner.ps1', 'test-dab-issuer-browser.ps1', 'dab-issuer-browser-check.js', 'dab-northwind-browser-check.js')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $negativeScripts $name)
     }
     Copy-Item -LiteralPath (Join-Path $repo 'requests/playwright-cli.iis-test.config.json') -Destination (Join-Path $negativeRequests 'playwright-cli.iis-test.config.json')
