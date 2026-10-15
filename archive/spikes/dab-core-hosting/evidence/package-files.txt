@@ -1,0 +1,14 @@
+.nupkg.metadata
+.signature.p7s
+LICENSE.txt
+microsoft.dataapibuilder.core.2.0.12.nupkg
+microsoft.dataapibuilder.core.2.0.12.nupkg.sha512
+microsoft.dataapibuilder.core.nuspec
+NOTICE.txt
+nuget_icon.png
+README.md
+lib\net8.0\Azure.DataApiBuilder.Auth.dll
+lib\net8.0\Azure.DataApiBuilder.Config.dll
+lib\net8.0\Azure.DataApiBuilder.Product.dll
+lib\net8.0\Azure.DataApiBuilder.Service.GraphQLBuilder.dll
+lib\net8.0\Microsoft.DataApiBuilder.Core.dll

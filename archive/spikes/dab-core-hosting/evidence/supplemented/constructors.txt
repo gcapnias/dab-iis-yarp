@@ -1,0 +1,67 @@
+TYPE Azure.DataApiBuilder.Core.Resolvers.CosmosClientProvider
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider)
+TYPE Azure.DataApiBuilder.Core.Models.GQLFilterParser
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Azure.DataApiBuilder.Core.Services.MetadataProviders.IMetadataProviderFactory)
+TYPE Azure.DataApiBuilder.Core.Services.Cache.DabCacheService
+  CTOR Void .ctor(ZiggyCreatures.Caching.Fusion.IFusionCache, Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Core.Services.Cache.DabCacheService], Microsoft.AspNetCore.Http.IHttpContextAccessor)
+TYPE Azure.DataApiBuilder.Core.Authorization.RestAuthorizationHandler
+  CTOR Void .ctor(Azure.DataApiBuilder.Auth.IAuthorizationResolver, Microsoft.AspNetCore.Http.IHttpContextAccessor, Microsoft.Extensions.Logging.ILogger`1[Microsoft.AspNetCore.Authorization.IAuthorizationHandler])
+TYPE Azure.DataApiBuilder.Core.Resolvers.Factories.QueryManagerFactory
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Core.Resolvers.IQueryExecutor], Microsoft.AspNetCore.Http.IHttpContextAccessor, Azure.DataApiBuilder.Config.HotReloadEventHandler`1[Azure.DataApiBuilder.Config.HotReloadEventArgs], Azure.DataApiBuilder.Core.Resolvers.IOboTokenProvider)
+TYPE Azure.DataApiBuilder.Core.Authorization.AuthorizationResolver
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Azure.DataApiBuilder.Core.Services.MetadataProviders.IMetadataProviderFactory, Azure.DataApiBuilder.Config.HotReloadEventHandler`1[Azure.DataApiBuilder.Config.HotReloadEventArgs])
+TYPE Azure.DataApiBuilder.Core.Configurations.RuntimeConfigValidator
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, System.IO.Abstractions.IFileSystem, Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Core.Configurations.RuntimeConfigValidator], Boolean)
+TYPE Azure.DataApiBuilder.Core.Services.RestService
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Resolvers.Factories.IQueryEngineFactory, Azure.DataApiBuilder.Core.Resolvers.Factories.IMutationEngineFactory, Azure.DataApiBuilder.Core.Services.MetadataProviders.IMetadataProviderFactory, Microsoft.AspNetCore.Http.IHttpContextAccessor, Microsoft.AspNetCore.Authorization.IAuthorizationService, Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Azure.DataApiBuilder.Core.Services.RequestValidator)
+  METHOD System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] ExecuteAsync(System.String, Azure.DataApiBuilder.Config.ObjectModel.EntityActionOperation, System.String)
+  METHOD System.String GetRouteAfterPathBase(System.String)
+  METHOD Boolean TryGetRestRouteFromConfig(System.String ByRef)
+  METHOD System.ValueTuple`2[System.String,System.String] GetEntityNameAndPrimaryKeyRouteFromRoute(System.String)
+  METHOD System.Threading.Tasks.Task AuthorizationCheckForRequirementAsync(System.Object, Microsoft.AspNetCore.Authorization.IAuthorizationRequirement)
+  METHOD Azure.DataApiBuilder.Config.ObjectModel.EntityActionOperation HttpVerbToOperations(System.String)
+TYPE Azure.DataApiBuilder.Core.Services.RequestValidator
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Services.MetadataProviders.IMetadataProviderFactory, Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider)
+TYPE Azure.DataApiBuilder.Core.Resolvers.Factories.QueryEngineFactory
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Azure.DataApiBuilder.Core.Resolvers.Factories.IAbstractQueryManagerFactory, Azure.DataApiBuilder.Core.Services.MetadataProviders.IMetadataProviderFactory, Azure.DataApiBuilder.Core.Resolvers.CosmosClientProvider, Microsoft.AspNetCore.Http.IHttpContextAccessor, Azure.DataApiBuilder.Auth.IAuthorizationResolver, Azure.DataApiBuilder.Core.Models.GQLFilterParser, Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Core.Resolvers.IQueryEngine], Azure.DataApiBuilder.Core.Services.Cache.DabCacheService, Azure.DataApiBuilder.Config.HotReloadEventHandler`1[Azure.DataApiBuilder.Config.HotReloadEventArgs])
+TYPE Azure.DataApiBuilder.Core.Resolvers.Factories.MutationEngineFactory
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Azure.DataApiBuilder.Core.Resolvers.Factories.IAbstractQueryManagerFactory, Azure.DataApiBuilder.Core.Services.MetadataProviders.IMetadataProviderFactory, Azure.DataApiBuilder.Core.Resolvers.CosmosClientProvider, Azure.DataApiBuilder.Core.Resolvers.Factories.IQueryEngineFactory, Microsoft.AspNetCore.Http.IHttpContextAccessor, Azure.DataApiBuilder.Auth.IAuthorizationResolver, Azure.DataApiBuilder.Core.Models.GQLFilterParser, Azure.DataApiBuilder.Config.HotReloadEventHandler`1[Azure.DataApiBuilder.Config.HotReloadEventArgs])
+TYPE Azure.DataApiBuilder.Core.Services.MetadataProviders.MetadataProviderFactory
+  CTOR Void .ctor(Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider, Azure.DataApiBuilder.Core.Configurations.RuntimeConfigValidator, Azure.DataApiBuilder.Core.Resolvers.Factories.IAbstractQueryManagerFactory, Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Core.Services.ISqlMetadataProvider], System.IO.Abstractions.IFileSystem, Azure.DataApiBuilder.Config.HotReloadEventHandler`1[Azure.DataApiBuilder.Config.HotReloadEventArgs], Boolean)
+TYPE Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider
+  CTOR Void .ctor(Azure.DataApiBuilder.Config.RuntimeConfigLoader)
+  METHOD System.Collections.Generic.List`1[Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider+RuntimeConfigLoadedHandler] get_RuntimeConfigLoadedHandlers()
+  METHOD Boolean get_IsLateConfigured()
+  METHOD Void set_IsLateConfigured(Boolean)
+  METHOD System.Collections.Generic.Dictionary`2[System.String,System.String] get_ManagedIdentityAccessToken()
+  METHOD Microsoft.Extensions.Primitives.IChangeToken GetChangeToken()
+  METHOD Void Dispose()
+  METHOD System.String get_ConfigFilePath()
+  METHOD Azure.DataApiBuilder.Config.ObjectModel.RuntimeConfig GetConfig()
+  METHOD Boolean TryGetConfig(Azure.DataApiBuilder.Config.ObjectModel.RuntimeConfig ByRef)
+  METHOD Boolean TryGetLoadedConfig(Azure.DataApiBuilder.Config.ObjectModel.RuntimeConfig ByRef)
+  METHOD System.Threading.Tasks.Task`1[System.Boolean] Initialize(System.String, System.String, System.String)
+  METHOD Boolean TrySetAccesstoken(System.String, System.String)
+  METHOD System.Threading.Tasks.Task`1[System.Boolean] Initialize(System.String, System.String, System.String, System.String, Azure.DataApiBuilder.Config.DeserializationVariableReplacementSettings)
+  METHOD Boolean IsConfigHotReloadable()
+  METHOD Void ValidateConfig()
+  METHOD Void AddMergedEntitiesToConfig(System.Collections.Generic.Dictionary`2[System.String,Azure.DataApiBuilder.Config.ObjectModel.Entity])
+  METHOD Void RemoveGeneratedAutoentitiesFromConfig()
+TYPE Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader
+  CTOR Void .ctor(System.IO.Abstractions.IFileSystem, Azure.DataApiBuilder.Config.HotReloadEventHandler`1[Azure.DataApiBuilder.Config.HotReloadEventArgs], System.String, System.String, Boolean, Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader])
+  METHOD System.String get_ConfigFilePath()
+  METHOD Boolean get_IsParseErrorEmitted()
+  METHOD Void Dispose()
+  METHOD System.String GetConfigDirectoryName()
+  METHOD System.String GetConfigFileName()
+  METHOD Boolean TryLoadConfig(System.String, Azure.DataApiBuilder.Config.ObjectModel.RuntimeConfig ByRef, Microsoft.Extensions.Logging.ILogger, System.Nullable`1[System.Boolean], Azure.DataApiBuilder.Config.DeserializationVariableReplacementSettings)
+  METHOD Boolean TryLoadKnownConfig(Azure.DataApiBuilder.Config.ObjectModel.RuntimeConfig ByRef, Boolean)
+  METHOD System.String GetFileNameForEnvironment(System.String, Boolean)
+  METHOD System.String GetFileName(System.String, Boolean)
+  METHOD System.String GetEnvironmentFileName(System.String, System.String)
+  METHOD Boolean DoesFileExistInDirectory(System.String)
+  METHOD System.String GetPublishedDraftSchemaLink()
+  METHOD System.String GetMergedFileNameForEnvironment(System.String, System.String)
+  METHOD Void UpdateConfigFilePath(System.String)
+  METHOD Void SetLogger(Microsoft.Extensions.Logging.ILogger`1[Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader])
+  METHOD Void FlushLogBuffer()

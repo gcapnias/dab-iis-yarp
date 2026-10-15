@@ -1,0 +1,43 @@
+Configured database: northwind; connection details suppressed.
+System.IO.FileNotFoundException: Could not load file or assembly 'OpenTelemetry.Exporter.OpenTelemetryProtocol, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7bd6737fe5b67e3c'. The system cannot find the file specified.
+File name: 'OpenTelemetry.Exporter.OpenTelemetryProtocol, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7bd6737fe5b67e3c'
+   at System.Signature.GetSignature(Void* pCorSig, Int32 cCorSig, RuntimeFieldHandleInternal fieldHandle, IRuntimeMethodInfo methodHandle, RuntimeType declaringType)
+   at System.Reflection.RuntimeConstructorInfo.<get_Signature>g__LazyCreateSignature|21_0()
+   at System.Reflection.RuntimeConstructorInfo.GetParametersNoCopy()
+   at System.Reflection.RuntimeConstructorInfo.GetParameters()
+   at System.Text.Json.Reflection.ReflectionExtensions.TryGetDeserializationConstructor(Type type, Boolean useDefaultCtorInAnnotatedStructs, ConstructorInfo& deserializationCtor)
+   at System.Text.Json.Serialization.Converters.ObjectConverterFactory.CreateConverter(Type typeToConvert, JsonSerializerOptions options)
+   at System.Text.Json.Serialization.JsonConverterFactory.GetConverterInternal(Type typeToConvert, JsonSerializerOptions options)
+   at System.Text.Json.JsonSerializerOptions.ExpandConverterFactory(JsonConverter converter, Type typeToConvert)
+   at System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver.GetConverterForType(Type typeToConvert, JsonSerializerOptions options, Boolean resolveJsonConverterAttribute)
+   at System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver.CreateJsonTypeInfo(Type type, JsonSerializerOptions options)
+   at System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver.GetTypeInfo(Type type, JsonSerializerOptions options)
+   at System.Text.Json.JsonSerializerOptions.GetTypeInfoNoCaching(Type type)
+   at System.Text.Json.JsonSerializerOptions.CachingContext.CreateCacheEntry(Type type, CachingContext context)
+--- End of stack trace from previous location ---
+   at System.Text.Json.JsonSerializerOptions.CachingContext.CacheEntry.GetResult()
+   at System.Text.Json.JsonSerializerOptions.CachingContext.GetOrAddTypeInfo(Type type, Boolean fallBackToNearestAncestorType)
+   at System.Text.Json.JsonSerializerOptions.GetTypeInfoInternal(Type type, Boolean ensureConfigured, Nullable`1 ensureNotNull, Boolean resolveIfMutable, Boolean fallBackToNearestAncestorType)
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo.Configure()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.ConfigureProperties()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.Configure()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.<EnsureConfigured>g__ConfigureSynchronized|172_0()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.EnsureConfigured()
+   at System.Text.Json.JsonSerializerOptions.GetTypeInfoInternal(Type type, Boolean ensureConfigured, Nullable`1 ensureNotNull, Boolean resolveIfMutable, Boolean fallBackToNearestAncestorType)
+   at System.Text.Json.Serialization.Metadata.JsonPropertyInfo.Configure()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.ConfigureProperties()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.Configure()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.<EnsureConfigured>g__ConfigureSynchronized|172_0()
+   at System.Text.Json.Serialization.Metadata.JsonTypeInfo.EnsureConfigured()
+   at System.Text.Json.JsonSerializerOptions.GetTypeInfoInternal(Type type, Boolean ensureConfigured, Nullable`1 ensureNotNull, Boolean resolveIfMutable, Boolean fallBackToNearestAncestorType)
+   at System.Text.Json.JsonSerializerOptions.GetTypeInfoForRootType(Type type, Boolean fallBackToNearestAncestorType)
+   at System.Text.Json.JsonSerializer.GetTypeInfo(JsonSerializerOptions options, Type inputType)
+   at System.Text.Json.JsonSerializer.GetTypeInfo[T](JsonSerializerOptions options)
+   at System.Text.Json.JsonSerializer.Deserialize[TValue](String json, JsonSerializerOptions options)
+   at Azure.DataApiBuilder.Config.RuntimeConfigLoader.TryParseConfig(String json, RuntimeConfig& config, String& parseError, DeserializationVariableReplacementSettings replacementSettings, String connectionString)
+   at Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader.TryLoadConfig(String path, RuntimeConfig& config, ILogger logger, Nullable`1 isDevMode, DeserializationVariableReplacementSettings replacementSettings)
+   at Azure.DataApiBuilder.Config.FileSystemRuntimeConfigLoader.TryLoadKnownConfig(RuntimeConfig& config, Boolean replaceEnvVar)
+   at Azure.DataApiBuilder.Core.Configurations.RuntimeConfigProvider.GetConfig()
+   at Program.<Main>$(String[] args) in E:\Shared\Workspaces\personal\dab-iis-yarp\.worktrees\spike-dab-core-hosting\archive\spikes\dab-core-hosting\Host\Program.cs:line 67
+Initialization failure: System.IO.FileNotFoundException
+Missing assembly: OpenTelemetry.Exporter.OpenTelemetryProtocol, Version=1.0.0.0, Culture=neutral, PublicKeyToken=7bd6737fe5b67e3c

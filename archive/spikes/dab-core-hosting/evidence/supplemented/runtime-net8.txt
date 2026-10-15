@@ -1,0 +1,4 @@
+Configured database: northwind; connection details suppressed.
+Runtime configuration loaded.
+Database metadata initialized.
+RestService activated.

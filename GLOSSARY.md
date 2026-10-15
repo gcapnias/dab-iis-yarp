@@ -1,0 +1,145 @@
+# Integrated DAB Application
+
+An application that provides end users access to the API described by its DAB configuration, using identities and access credentials supplied by a separate issuer.
+
+## Language
+
+**Configuration-driven DAB access**:
+Access through the application to every REST and GraphQL endpoint enabled by DAB configuration, including configured operations and permissions. Configuration changes take effect after restarting the application, without recompiling it; MCP access is optional.
+_Avoid_: Products-only integration, fixed-endpoint integration
+
+**Configured resource permission**:
+The access rule declared for a DAB resource, operation and role. An issuer role carried in a credential grants resource access only when the DAB application's validated caller and configured permission agree.
+_Avoid_: Issuer login permission, automatic role access
+
+**Requested resource role**:
+The issuer role selected for an API request. Selection is valid only when the validated access credential contains that role; it does not create a role grant or override configured resource permissions.
+_Avoid_: Client-granted role, role-header permission
+
+**Local API proof**:
+Evidence for configuration-driven REST and GraphQL behavior in the embedded application, using isolated data and explicitly identified permissions. It is separate from issuer interoperability and server environment evaluation.
+_Avoid_: Complete security proof, production readiness
+
+**Issuer interoperability proof**:
+Evidence that the real Windows caller-to-persisted-issuer-account-to-browser-credential chain reaches the embedded application, where DAB validates the caller and enforces configured REST and GraphQL permissions. Controlled invalid-credential tests complement this live proof; neither part substitutes for server environment evaluation.
+_Avoid_: Issuer-only proof, anonymous API proof
+
+**Identity issuer**:
+The separate application that binds an authenticated Windows caller to an issuer account and issues access credentials from its persisted profile and roles.
+_Avoid_: DAB login service, DAB application
+
+**Windows caller**:
+The user authenticated for the current request by Windows Authentication, distinct from the account running the application.
+_Avoid_: Worker identity, application-pool identity
+
+**Worker identity**:
+The operating-system account under which an issuer or embedded application's process runs, with access to that application's files and required services. It does not identify the Windows caller or grant that caller issuer roles or resource permissions.
+_Avoid_: Caller identity, issuer account
+
+**Deployment operator**:
+The person authorized to prepare the test environment and provision application identities, credentials and access boundaries. Installation authority does not make the operator the application's runtime identity or its verification caller.
+_Avoid_: Application user, administrator caller
+
+**Verification operator**:
+The operating-system identity running the issuer or DAB verification tooling, whose authority over verification artifacts is separate from the browser's supplied Windows caller credentials and the application's worker identity.
+_Avoid_: Browser caller, application-pool identity
+
+**Issuer account**:
+The locally persisted account explicitly mapped to a Windows caller, with an enabled state, profile, roles and permitted claims. A Windows identity alone does not grant issuer access.
+_Avoid_: Automatically registered user, Windows group membership
+
+**Profile**:
+The issuer account's stable application identity and intended descriptive or authorization attributes. Profile attributes influence DAB access only through explicitly configured policies.
+_Avoid_: Windows profile, directory record
+
+**Issuer role**:
+An operator-assigned role persisted for an issuer account and carried in its access credential. Windows groups do not automatically become issuer roles.
+_Avoid_: AD group, operating-system permission
+
+**Issuer store**:
+The persisted issuer accounts, profiles, roles, OIDC client registrations and credential-issuance and renewal state. It is separate from the resources exposed to callers through DAB.
+_Avoid_: Northwind account store, API resource data
+
+**Issuer-state recovery**:
+Restoration of the issuer's persisted identity, client authorization and credential state while preserving account restrictions and credential revocations. Restoring earlier data does not by itself establish safe recovery.
+_Avoid_: Database restore as authorization recovery, binary rollback
+
+**Issuer recovery record**:
+The protected record of approved authorization changes and revocations used to reconcile restored issuer state. Its authority is independent of the state restored from issuer backups.
+_Avoid_: Database backup as permission proof, diagnostic log
+
+**Issuer recovery boundary**:
+The distinction between credential-issuance grants established before issuer recovery and those permitted afterward. Restoring issuer data, configuration or keys does not make earlier invalidated grants current again.
+_Avoid_: Database restore timestamp, key replacement as complete session invalidation
+
+**Issuer outage tolerance**:
+The API's ability to serve callers with unexpired, verifiable access credentials while the issuer is unavailable and resource dependencies remain usable. It does not imply that login, refresh or a newly started API can operate without the issuer.
+_Avoid_: Issuer-independent authentication, unconditional offline access
+
+**DAB resource store**:
+The data exposed through configured DAB resources and governed by configured resource permissions. Access to that data does not provision an issuer account or assign its roles.
+_Avoid_: Identity database, login store
+
+**Mutation fixture**:
+Disposable resource data explicitly authorized for verification that creates, updates or deletes records. Successful fixture mutations do not authorize writes to the separately evaluated resource store.
+_Avoid_: Northwind write proof, unrestricted test data
+
+**Browser verification artifacts**:
+Temporary configuration, source and output used by the issuer or DAB browser verifiers, which may contain the supplied browser credentials. Their protection is separate from the browser session's authentication and authorization.
+_Avoid_: Harmless test output, browser session
+
+**Protected browser scratch**:
+Temporary storage for browser verification artifacts whose location, ownership and access boundary are verified before sensitive material is written. Cleanup depends on re-establishing that boundary and the original artifact location's identity.
+_Avoid_: Gitignored directory as protection, cleanup as credential protection
+
+**Cookie session**:
+The browser's issuer-managed access and refresh credentials, separate from its cached Windows Authentication state. Browser sign-out clears those credentials; complete issuer logout additionally revokes refresh access, while copied access credentials remain valid until expiry.
+_Avoid_: Windows logon session
+
+**Application session page**:
+The integrated application's browser interface for validated identity, requested resource role and issuer-managed session actions. It is separate from business data screens and issuer administration.
+_Avoid_: Data editor, issuer administration portal
+
+**Browser sign-out**:
+Removal of the browser's application credentials without ending cached Windows Authentication or revoking copied access credentials. If issuer refresh revocation cannot be confirmed, that remaining state is reported separately.
+_Avoid_: Windows logout, complete token revocation
+
+**Refresh family**:
+The lineage of rotating refresh credentials for one session or authorization. Reuse of a consumed credential revokes that lineage, including its active descendants.
+_Avoid_: Independent reusable refresh token
+
+**Renewal session**:
+The bounded opportunity established by explicit sign-in to renew access credentials through browser or OIDC refresh. Its absolute duration and timeout between successful renewals are separate from access-credential expiry and human activity.
+_Avoid_: Access-token lifetime, human-inactivity session
+
+**Embedded-host cookie bridge**:
+The DAB application's boundary that adapts the issuer's browser credential for validation by the DAB engine. Transport adaptation does not authenticate the caller or grant resource permissions on its own.
+_Avoid_: Issuer-hosted DAB, automatic DAB cookie support
+
+**Browser API origin**:
+The origin from which the browser makes requests to the embedded application's API; the issuer and API can share an origin while remaining separate applications. Cookie eligibility does not grant cross-origin access or permission to change resources.
+_Avoid_: Shared-cookie authorization, cookie-derived origin permission
+
+**Cookie mutation protection**:
+The embedded application's requirement that a state-changing cookie request comes from its API origin and carries an antiforgery credential bound to the authenticated caller. A valid access credential alone does not satisfy that requirement.
+_Avoid_: JWT-only CSRF protection, anonymous antiforgery validation
+
+**Local issuer proof**:
+Evidence for the Windows caller-to-persisted-account-to-token/cookie chain on the development machine, with fixture and real-service results identified separately.
+_Avoid_: IIS proof, production readiness
+
+**Offline browser verifier proof**:
+Evidence for the issuer or DAB verifier's artifact protection and process lifecycle using synthetic credentials and a substitute browser runner. It does not establish live browser behavior or access from another operating-system account.
+_Avoid_: Live browser proof, cross-account isolation proof
+
+**Server environment evaluation**:
+Evidence that the delivered applications work in an identified Windows Server/IIS test environment, with its identities, permissions and acceptance scope stated explicitly.
+_Avoid_: Local Kestrel proof, production rollout
+
+**Accepted installation evidence**:
+Evidence accepted for this effort from installing and verifying the applications in an initially empty Windows environment. Acceptance of this first installation does not claim that the documented procedure has been repeated in another environment.
+_Avoid_: Second-server proof, production readiness
+
+**Deployment reproduction proof**:
+Evidence that the delivered applications can be installed and verified in another empty test environment by following the documented procedure. A successful existing-server evaluation or reviewed installation guide does not alone establish this proof.
+_Avoid_: Syntax-checked deployment, reviewed runbook as installation evidence

@@ -1,0 +1,48 @@
+@issuer = https://localhost:5001
+
+### Public OIDC discovery document (must be anonymous and reachable by server-side validators)
+GET {{issuer}}/.well-known/openid-configuration
+Accept: application/json
+
+### Public OIDC signing keys (public keys only)
+GET {{issuer}}/.well-known/jwks
+Accept: application/json
+
+### Windows-authenticated development diagnostic (the VS Code REST Client does not send default Windows credentials)
+### Expected: 401 in this client. Use scripts/test-identity-issuer.ps1 to verify the successful Windows-authenticated request.
+GET {{issuer}}/diagnostics/windows-auth
+
+### CSRF bootstrap (Windows Authentication required)
+### Expected: 401 in this client. Successful response includes a request token; do not share its output.
+GET {{issuer}}/csrf
+
+### Session creation without Windows authentication or antiforgery token
+### Expected: 401 for this client. An authenticated request without a token must return 400.
+POST {{issuer}}/session
+Content-Type: application/json
+
+{}
+
+### Session refresh without Windows authentication or antiforgery token
+### Expected: 401 for this client. An authenticated request without a token must return 400.
+POST {{issuer}}/session/refresh
+Content-Type: application/json
+
+{}
+
+### Logout without Windows authentication or antiforgery token
+### Expected: 401 for this client. An authenticated request without a token must return 400.
+POST {{issuer}}/session/logout
+Content-Type: application/json
+
+{}
+
+### Authorization endpoint requires Windows Authentication and a registered public client with PKCE
+### The Windows-authenticated script follows the code redirect, validates ID/access tokens, and tests refresh rotation/replay without printing token values.
+GET {{issuer}}/connect/authorize?client_id=dab-issuer-test-client&redirect_uri=https%3A%2F%2Flocalhost%3A5443%2Fcallback&response_type=code&scope=openid%20profile%20roles%20offline_access&state=manual-test&nonce=manual-test&code_challenge=replace-with-S256-challenge&code_challenge_method=S256
+
+### Token endpoint requires a valid code and PKCE verifier; this incomplete request must return 400
+POST {{issuer}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&client_id=dab-issuer-test-client&redirect_uri=https%3A%2F%2Flocalhost%3A5443%2Fcallback&code=invalid&code_verifier=invalid

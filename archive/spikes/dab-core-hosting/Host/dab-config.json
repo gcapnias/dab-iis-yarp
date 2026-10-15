@@ -1,0 +1,8 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v2.0.12/dab.draft.schema.json",
+  "data-source": { "database-type": "mssql", "connection-string": "@env('DAB_CONNECTION_STRING')" },
+  "runtime": { "rest": { "enabled": true, "path": "/api" }, "graphql": { "enabled": false }, "host": { "mode": "development", "authentication": { "provider": "Unauthenticated" } } },
+  "entities": {
+    "Products": { "source": { "object": "dbo.Products", "type": "table" }, "rest": true, "graphql": false, "permissions": [ { "role": "anonymous", "actions": [ "read" ] } ] }
+  }
+}

@@ -4,14 +4,14 @@ This is a single-context repo. Engineering skills read domain documentation when
 
 ## Before exploring
 
-- Read root `CONTEXT.md` when it exists.
+- Read root `GLOSSARY.md` when it exists.
 - Read relevant decisions in `docs/adr/` when that directory exists.
 
 Proceed when either is absent. `/domain-modeling` creates these documents when terms or decisions are resolved.
 
 ## Layout
 
-- `CONTEXT.md`: the repository's domain vocabulary.
+- `GLOSSARY.md`: the repository's domain vocabulary.
 - `docs/adr/`: decisions that apply to the repository.
 
-Use the vocabulary in `CONTEXT.md` for issues, proposals, hypotheses, and tests. Surface any conflict with an existing ADR explicitly.
+Use the vocabulary in `GLOSSARY.md` for issues, proposals, hypotheses, and tests. Surface any conflict with an existing ADR explicitly.

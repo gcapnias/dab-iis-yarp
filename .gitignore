@@ -500,3 +500,7 @@ $RECYCLE.BIN/
 
 # Keep .gitkeep files in the repository
 !**/.gitkeep
+
+# Linked worktrees: keep only the primary folder placeholder
+/.worktrees/**
+!/.worktrees/.gitkeep

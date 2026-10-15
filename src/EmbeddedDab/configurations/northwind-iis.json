@@ -1,0 +1,30 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/download/v2.0.12/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('DAB_CONNECTION_STRING')"
+  },
+  "runtime": {
+    "base-route": "/dab",
+    "rest": { "enabled": true, "path": "/api" },
+    "graphql": { "enabled": true, "path": "/graphql", "allow-introspection": true },
+    "host": {
+      "mode": "development",
+      "authentication": {
+        "provider": "Custom",
+        "jwt": { "issuer": "https://ws2025s01.mshome.net/", "audience": "api://dab-interoperability-test" }
+      }
+    }
+  },
+  "entities": {
+    "Products": {
+      "source": { "object": "dbo.Products", "type": "table" },
+      "rest": true,
+      "graphql": { "type": { "singular": "Product", "plural": "Products" } },
+      "permissions": [
+        { "role": "reader", "actions": ["read"] },
+        { "role": "writer", "actions": ["read"] }
+      ]
+    }
+  }
+}

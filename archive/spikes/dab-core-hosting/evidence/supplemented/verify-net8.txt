@@ -1,0 +1,24 @@
+Configured database: northwind; connection details suppressed.
+Runtime configuration loaded.
+Database metadata initialized.
+RestService activated.
+HTTP 200 /host; processId=44808
+{"source":"host","processId":44808,"framework":".NET 8.0.31"}
+HTTP 200 /api/Products?$first=2; processId=44808
+{"value":[{"ProductID":1,"ProductName":"Chai","SupplierID":1,"CategoryID":1,"QuantityPerUnit":"10 boxes x 20 bags","UnitPrice":18.0000,"UnitsInStock":39,"UnitsOnOrder":0,"ReorderLevel":10,"Discontinued":false},{"ProductID":2,"ProductName":"Chang","SupplierID":1,"CategoryID":1,"QuantityPerUnit":"24 - 12 oz bottles","UnitPrice":19.0000,"UnitsInStock":17,"UnitsOnOrder":40,"ReorderLevel":25,"Discontinued":false}],"nextLink":"http://127.0.0.1:5186/api/Products?$first=2&$after=W3siRW50aXR5TmFtZSI6IlByb2R1Y3RzIiwiRmllbGROYW1lIjoiUHJvZHVjdElEIiwiRmllbGRWYWx1ZSI6MiwiRGlyZWN0aW9uIjowfV0="}
+SQL verification: database=northwind; table=dbo.Products; rowCount=77
+COLUMN ProductID int nullable=NO
+COLUMN ProductName nvarchar nullable=NO
+COLUMN SupplierID int nullable=YES
+COLUMN CategoryID int nullable=YES
+COLUMN QuantityPerUnit nvarchar nullable=YES
+COLUMN UnitPrice money nullable=YES
+COLUMN UnitsInStock smallint nullable=YES
+COLUMN UnitsOnOrder smallint nullable=YES
+COLUMN ReorderLevel smallint nullable=YES
+COLUMN Discontinued bit nullable=NO
+PRIMARY KEY ProductID
+SQL SAMPLE 1 Chai
+SQL SAMPLE 2 Chang
+Read-only same-process verification passed.
+Host stopped and disposed.
