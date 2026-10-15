@@ -17,7 +17,6 @@ $cleanupFailures = [Collections.Generic.List[string]]::new()
 $scratch = $null
 $cliCommand = $null
 $session = 'issuer-dab-' + [guid]::NewGuid().ToString('N')
-$runnerStarted = $false
 $phase = 'setup'
 $stage = 'url_validation'
 
@@ -32,6 +31,7 @@ try {
     }
 
     . (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1')
+    . (Join-Path $PSScriptRoot 'ProtectedBrowserRunner.ps1')
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
     $scratchBase = Join-Path $repositoryRoot '.scratch/identity-issuer'
     $stage = 'gitignore_check'
@@ -70,55 +70,25 @@ try {
     $stage = 'config_template_load'
     $configPathTemplate = Join-Path $repositoryRoot 'requests/playwright-cli.iis-test.config.json'
     $config = Get-Content -LiteralPath $configPathTemplate -Raw | ConvertFrom-Json -AsHashtable
-    $config.browser.browserName = 'chromium'
-    $config.browser.isolated = $true
-    $config.browser.launchOptions = @{
-        channel = 'msedge'
-        headless = $true
-        args = @('--auth-server-allowlist=' + $Issuer.DnsSafeHost)
-    }
-    $config.browser.contextOptions.ignoreHTTPSErrors = -not [bool]$ValidateServerCertificate
+    Set-ProtectedBrowserCliConfiguration -Config $config -Issuer $Issuer -ScratchPath $scratch.Path -ValidateServerCertificate ([bool]$ValidateServerCertificate)
     if ($CredentialFile) {
         $stage = 'credential_import'
-        $browserCredential = Import-Clixml -LiteralPath $CredentialFile
-        $config.browser.contextOptions.httpCredentials = @{
-            username = $browserCredential.UserName
-            password = $browserCredential.GetNetworkCredential().Password
-            origin = $Issuer.GetLeftPart([UriPartial]::Authority)
-        }
+        Set-ProtectedBrowserCliCredentials -Config $config -Issuer $Issuer -CredentialFile $CredentialFile
     }
-    $config.outputMode = 'stdout'
-    $config.outputDir = $scratch.Path
-    $config.timeouts = @{ action = 15000; navigation = 60000 }
     $serializedConfig = $config | ConvertTo-Json -Depth 10
     $stage = 'config_write'
     [IO.File]::WriteAllText($configPath, $serializedConfig, [Text.UTF8Encoding]::new($false))
 
     $null = Test-ProtectedBrowserScratchArtifact -Scratch $scratch -Path $codePath
     $null = Test-ProtectedBrowserScratchArtifact -Scratch $scratch -Path $configPath
-    $runnerStarted = $true
     $phase = 'runner'
     $stage = 'runner_open'
-    $openOutput = @(& $cliCommand.Source --config $configPath "-s=$session" open $metadataUrl.AbsoluteUri 2>&1)
-    $openExitCode = $LASTEXITCODE
-    if ($openExitCode -ne 0) { throw $runnerFailures.Open }
-
-    $testOutput = @(& $cliCommand.Source "-s=$session" run-code "--filename=$codePath" 2>&1)
-    $runExitCode = $LASTEXITCODE
-    if ($runExitCode -ne 0) { throw $runnerFailures.RunCode }
-
-    $serialized = ($testOutput | ForEach-Object { [string]$_ }) -join "`n"
-    $match = [regex]::Match($serialized, 'DAB_ISSUER_BROWSER_RESULT:(\{[^\r\n]+\})')
-    if (-not $match.Success) { throw $runnerFailures.MissingResult }
-    try {
-        $parsedResult = $match.Groups[1].Value -replace '\\"', '"' | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-        if ($parsedResult -isnot [System.Collections.IDictionary]) { throw 'invalid_result' }
-        $result = [ordered]@{}
-        foreach ($key in $parsedResult.Keys) { $result[$key] = $parsedResult[$key] }
-    }
-    catch {
-        throw 'browser_runner_runtime_error'
-    }
+    $runnerOutcome = Invoke-ProtectedBrowserCliLifecycle `
+        -CliCommand $cliCommand -Session $session -ConfigPath $configPath -CodePath $codePath `
+        -MetadataUrl $metadataUrl -ResultMarker 'DAB_ISSUER_BROWSER_RESULT'
+    if ($runnerOutcome.CloseFailed) { $cleanupFailures.Add('browser_close_failed') }
+    if ($runnerOutcome.Failure) { throw $runnerOutcome.Failure }
+    $result = $runnerOutcome.Result
 }
 catch {
     if ($env:DAB_BROWSER_SCRATCH_TEST_DIAGNOSTICS -eq '1') { [Console]::Error.WriteLine('setup_stage=' + $stage) }
@@ -139,16 +109,6 @@ catch {
     }
 }
 finally {
-    if ($runnerStarted -and $null -ne $cliCommand) {
-        try {
-            $closeOutput = @(& $cliCommand.Source "-s=$session" close 2>&1)
-            $closeExitCode = $LASTEXITCODE
-            if ($closeExitCode -ne 0) { $cleanupFailures.Add('browser_close_failed') }
-        }
-        catch {
-            $cleanupFailures.Add('browser_close_failed')
-        }
-    }
     if ($null -ne $scratch) {
         $cleanupResult = Remove-ProtectedBrowserScratchDirectory -Scratch $scratch
         if (-not $cleanupResult.Success) { $cleanupFailures.Add($cleanupResult.Code) }

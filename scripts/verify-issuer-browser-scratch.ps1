@@ -92,6 +92,32 @@ function Invoke-IssuerVerifier([string]$Root, [string]$Bin, [string]$Mode, [stri
     [pscustomobject]@{ ExitCode = $process.ExitCode; Stdout = $stdout.GetAwaiter().GetResult(); Stderr = $stderr.GetAwaiter().GetResult() }
 }
 
+function Invoke-WithScratchHelperFailure {
+    param(
+        [Parameter(Mandatory)][string]$HelperPath,
+        [Parameter(Mandatory)][string]$FunctionName,
+        [Parameter(Mandatory)][string]$FailureCode,
+        [Parameter(Mandatory)][scriptblock]$Invocation
+    )
+
+    $backupPath = $HelperPath + '.held'
+    $originalMoved = $false
+    try {
+        Move-Item -LiteralPath $HelperPath -Destination $backupPath
+        $originalMoved = $true
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $HelperPath
+        $override = "`nfunction {0} {{ throw '{1}' }}" -f $FunctionName, $FailureCode
+        Add-Content -LiteralPath $HelperPath -Value $override
+        & $Invocation
+    }
+    finally {
+        if ($originalMoved) {
+            Remove-Item -LiteralPath $HelperPath -Force -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath $backupPath -Destination $HelperPath -Force
+        }
+    }
+}
+
 Assert-That $IsWindows 'issuer ACL verification requires Windows'
 Assert-That ($PSVersionTable.PSVersion.Major -ge 7) 'run with PowerShell 7'
 $profileRoot = [IO.Path]::GetFullPath([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile))
@@ -137,7 +163,7 @@ exit $LASTEXITCODE
 '@ | Set-Content -LiteralPath $script:wrapperPath
     Set-Content -LiteralPath (Join-Path $fixture 'fake-program-files/Microsoft/Edge/Application/msedge.exe') -Value 'fixture-only' -NoNewline
     Set-Content -LiteralPath (Join-Path $fixture 'fake-program-files-x86/Microsoft/Edge/Application/msedge.exe') -Value 'fixture-only' -NoNewline
-    foreach ($name in @('ProtectedBrowserScratch.ps1', 'test-identity-issuer-iis.ps1', 'identity-issuer-browser-check.js')) {
+    foreach ($name in @('ProtectedBrowserScratch.ps1', 'ProtectedBrowserRunner.ps1', 'test-identity-issuer-iis.ps1', 'identity-issuer-browser-check.js')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $scripts $name)
     }
     Copy-Item -LiteralPath (Join-Path $repo 'requests/playwright-cli.iis-test.config.json') -Destination (Join-Path $requests 'playwright-cli.iis-test.config.json')
@@ -298,14 +324,11 @@ $global:LASTEXITCODE = 2
     $report.Add('untrusted_mutation_grant=actual_fixture_acl_rejected_before_import')
 
     # Simulate the helper's actual untrusted-owner decision; changing an existing owner needs SeSecurityPrivilege on this workstation.
-    $ownerHelperPath = Join-Path $scripts 'ProtectedBrowserScratch.ps1'
-    $ownerHelperBackup = $ownerHelperPath + '.held'
-    Move-Item -LiteralPath $ownerHelperPath -Destination $ownerHelperBackup
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $ownerHelperPath
-    Add-Content -LiteralPath $ownerHelperPath -Value "`nfunction New-ProtectedBrowserScratchDirectory { throw 'scratch_path_untrusted_owner' }"
+    $helperPath = Join-Path $scripts 'ProtectedBrowserScratch.ps1'
     $ownerControl = Join-Path $fixture 'untrusted-owner.json'
-    try { $ownerRun = Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $ownerControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback' }
-    finally { Move-Item -LiteralPath $ownerHelperBackup -Destination $ownerHelperPath -Force }
+    $ownerRun = Invoke-WithScratchHelperFailure -HelperPath $helperPath -FunctionName 'New-ProtectedBrowserScratchDirectory' -FailureCode 'scratch_path_untrusted_owner' -Invocation {
+        Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $ownerControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback'
+    }
     $ownerResult = Assert-SingleResult $ownerRun
     Assert-That ($ownerRun.ExitCode -eq 1 -and $ownerResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ($ownerControl + '.import-called')) -and -not (Test-Path -LiteralPath $ownerControl)) 'untrusted-owner helper failure reached credential import or runner invocation'
     Assert-Sanitized $ownerRun $script:secretMarker $fixture
@@ -318,7 +341,7 @@ $global:LASTEXITCODE = 2
     $null = [IO.Directory]::CreateDirectory((Join-Path $reparseRoot '.scratch'))
     $reparseTarget = Join-Path $reparseRoot 'safe-target'
     $null = [IO.Directory]::CreateDirectory($reparseTarget)
-    foreach ($name in @('ProtectedBrowserScratch.ps1', 'test-identity-issuer-iis.ps1', 'identity-issuer-browser-check.js')) { Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $reparseRoot 'scripts' $name) }
+    foreach ($name in @('ProtectedBrowserScratch.ps1', 'ProtectedBrowserRunner.ps1', 'test-identity-issuer-iis.ps1', 'identity-issuer-browser-check.js')) { Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $reparseRoot 'scripts' $name) }
     Copy-Item (Join-Path $repo 'requests/playwright-cli.iis-test.config.json') (Join-Path $reparseRoot 'requests/playwright-cli.iis-test.config.json')
     Set-Content -LiteralPath (Join-Path $reparseRoot '.gitignore') -Value '.scratch/' -NoNewline
     $null = git -C $reparseRoot init --quiet
@@ -330,35 +353,28 @@ $global:LASTEXITCODE = 2
     $report.Add('reparse_redirection=actual_fixture_junction_rejected')
 
     # Inject only the helper result at the integration seam; actual ACL acceptance remains covered above.
-    $helperPath = Join-Path $scripts 'ProtectedBrowserScratch.ps1'
-    $helperBackup = $helperPath + '.held'
-    Move-Item -LiteralPath $helperPath -Destination $helperBackup
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $helperPath
-    Add-Content -LiteralPath $helperPath -Value "`nfunction New-ProtectedBrowserScratchDirectory { throw 'scratch_collision' }"
-    try { $collisionRun = Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control (Join-Path $fixture 'helper-collision.json') -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback' }
-    finally { Move-Item -LiteralPath $helperBackup -Destination $helperPath -Force }
+    $collisionControl = Join-Path $fixture 'helper-collision.json'
+    $collisionRun = Invoke-WithScratchHelperFailure -HelperPath $helperPath -FunctionName 'New-ProtectedBrowserScratchDirectory' -FailureCode 'scratch_collision' -Invocation {
+        Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $collisionControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback'
+    }
     $collisionResult = Assert-SingleResult $collisionRun
-    Assert-That ($collisionRun.ExitCode -eq 1 -and $collisionResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ((Join-Path $fixture 'helper-collision.json') + '.import-called')) -and -not (Test-Path -LiteralPath (Join-Path $fixture 'helper-collision.json'))) 'helper collision failure reached credential import or runner invocation'
+    Assert-That ($collisionRun.ExitCode -eq 1 -and $collisionResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ($collisionControl + '.import-called')) -and -not (Test-Path -LiteralPath $collisionControl)) 'helper collision failure reached credential import or runner invocation'
     $report.Add('helper_collision_failure=setup_result_without_import_or_runner')
 
-    Move-Item -LiteralPath $helperPath -Destination $helperBackup
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $helperPath
-    Add-Content -LiteralPath $helperPath -Value "`nfunction Get-BrowserScratchSecurityDescriptor { throw 'scratch_path_unavailable' }"
     $inspectionControl = Join-Path $fixture 'helper-inspection-unavailable.json'
-    try { $inspectionRun = Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $inspectionControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback' }
-    finally { Move-Item -LiteralPath $helperBackup -Destination $helperPath -Force }
+    $inspectionRun = Invoke-WithScratchHelperFailure -HelperPath $helperPath -FunctionName 'Get-BrowserScratchSecurityDescriptor' -FailureCode 'scratch_path_unavailable' -Invocation {
+        Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $inspectionControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback'
+    }
     $inspectionResult = Assert-SingleResult $inspectionRun
     Assert-That ($inspectionRun.ExitCode -eq 1 -and $inspectionResult.failure -eq 'browser_setup_failed' -and -not (Test-Path -LiteralPath ($inspectionControl + '.import-called')) -and -not (Test-Path -LiteralPath $inspectionControl)) 'unavailable security-descriptor inspection reached credential import or runner invocation'
     Assert-Sanitized $inspectionRun $script:secretMarker $fixture
     $report.Add('unavailable_acl_inspection=helper_failure_rejected_before_import')
 
     # If the helper unexpectedly throws while deleting, preserve one JSON result and report unknown artifacts as retained.
-    Move-Item -LiteralPath $helperPath -Destination $helperBackup
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ProtectedBrowserScratch.ps1') -Destination $helperPath
-    Add-Content -LiteralPath $helperPath -Value "`nfunction Remove-ProtectedBrowserScratchDirectory { throw 'fixture_cleanup_exception' }"
     $removeControl = Join-Path $fixture 'helper-remove-exception.json'
-    try { $removeRun = Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $removeControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback' }
-    finally { Move-Item -LiteralPath $helperBackup -Destination $helperPath -Force }
+    $removeRun = Invoke-WithScratchHelperFailure -HelperPath $helperPath -FunctionName 'Remove-ProtectedBrowserScratchDirectory' -FailureCode 'fixture_cleanup_exception' -Invocation {
+        Invoke-IssuerVerifier -Root $fixture -Bin $bin -Mode 'success' -Control $removeControl -Credential $credentialPath -Issuer 'https://proof.example.test' -Redirect 'https://proof.example.test/oidc-browser-test/callback'
+    }
     $removeResult = Assert-SingleResult $removeRun
     Assert-That ($removeRun.ExitCode -eq 1 -and $removeResult.failure -eq 'browser_cleanup_failed' -and $removeResult.cleanupFailures[0] -eq 'scratch_cleanup_failed' -and $removeResult.artifactsRetained) 'throwing cleanup helper bypassed or misreported the final result'
     $removeControlData = Get-Content -LiteralPath $removeControl -Raw | ConvertFrom-Json -AsHashtable
